@@ -1,0 +1,5 @@
+{
+  "name": "SafeTrack - Church Donation Vault",
+  "description": "A secure, local-first application for church treasurers to manage donations, batches, and givers with AI-powered insights.",
+  "requestFramePermissions": []
+}
