@@ -209,7 +209,7 @@ const GiverRegistry: React.FC = () => {
                     <input 
                       required
                       placeholder="e.g. John Doe"
-                      className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-church-500 bg-gray-50 focus:bg-white transition-colors"
+                      className="w-full p-3 rounded-xl border border-gray-400 focus:ring-2 focus:ring-church-500 bg-gray-50 focus:bg-white transition-colors"
                       value={formData.name}
                       onChange={e => setFormData({...formData, name: e.target.value})}
                     />
@@ -218,7 +218,7 @@ const GiverRegistry: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-1">Joint / Second Name</label>
                     <input 
                       placeholder="e.g. Jane Doe"
-                      className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-church-500 bg-gray-50 focus:bg-white transition-colors"
+                      className="w-full p-3 rounded-xl border border-gray-400 focus:ring-2 focus:ring-church-500 bg-gray-50 focus:bg-white transition-colors"
                       value={formData.name2}
                       onChange={e => setFormData({...formData, name2: e.target.value})}
                     />
@@ -235,7 +235,7 @@ const GiverRegistry: React.FC = () => {
                     <input 
                       type="email"
                       placeholder="primary@email.com"
-                      className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-church-500 bg-gray-50 focus:bg-white transition-colors"
+                      className="w-full p-3 rounded-xl border border-gray-400 focus:ring-2 focus:ring-church-500 bg-gray-50 focus:bg-white transition-colors"
                       value={formData.email}
                       onChange={e => setFormData({...formData, email: e.target.value})}
                     />
@@ -245,7 +245,7 @@ const GiverRegistry: React.FC = () => {
                     <input 
                       type="email"
                       placeholder="spouse@email.com"
-                      className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-church-500 bg-gray-50 focus:bg-white transition-colors"
+                      className="w-full p-3 rounded-xl border border-gray-400 focus:ring-2 focus:ring-church-500 bg-gray-50 focus:bg-white transition-colors"
                       value={formData.email2}
                       onChange={e => setFormData({...formData, email2: e.target.value})}
                     />
@@ -255,19 +255,19 @@ const GiverRegistry: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700">Mailing Address</label>
                   <input 
                     placeholder="Address Line 1"
-                    className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-church-500 bg-gray-50 focus:bg-white transition-colors"
+                    className="w-full p-3 rounded-xl border border-gray-400 focus:ring-2 focus:ring-church-500 bg-gray-50 focus:bg-white transition-colors"
                     value={formData.address1}
                     onChange={e => setFormData({...formData, address1: e.target.value})}
                   />
                   <input 
                     placeholder="Address Line 2 (Optional)"
-                    className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-church-500 bg-gray-50 focus:bg-white transition-colors"
+                    className="w-full p-3 rounded-xl border border-gray-400 focus:ring-2 focus:ring-church-500 bg-gray-50 focus:bg-white transition-colors"
                     value={formData.address2}
                     onChange={e => setFormData({...formData, address2: e.target.value})}
                   />
                   <input 
                     placeholder="Address Line 3 (City, State, Zip)"
-                    className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-church-500 bg-gray-50 focus:bg-white transition-colors"
+                    className="w-full p-3 rounded-xl border border-gray-400 focus:ring-2 focus:ring-church-500 bg-gray-50 focus:bg-white transition-colors"
                     value={formData.address3}
                     onChange={e => setFormData({...formData, address3: e.target.value})}
                   />
@@ -285,7 +285,7 @@ const GiverRegistry: React.FC = () => {
                         <Smartphone className="absolute left-3 top-3.5 text-gray-400 w-4 h-4" />
                         <input 
                             placeholder="e.g. 555-0199"
-                            className="w-full pl-10 p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-church-500 bg-gray-50 focus:bg-white transition-colors"
+                            className="w-full pl-10 p-3 rounded-xl border border-gray-400 focus:ring-2 focus:ring-church-500 bg-gray-50 focus:bg-white transition-colors"
                             value={formData.eTransferId}
                             onChange={e => setFormData({...formData, eTransferId: e.target.value})}
                         />
@@ -297,7 +297,7 @@ const GiverRegistry: React.FC = () => {
                         <Smartphone className="absolute left-3 top-3.5 text-gray-400 w-4 h-4" />
                         <input 
                             placeholder="e.g. spouse@mail.com"
-                            className="w-full pl-10 p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-church-500 bg-gray-50 focus:bg-white transition-colors"
+                            className="w-full pl-10 p-3 rounded-xl border border-gray-400 focus:ring-2 focus:ring-church-500 bg-gray-50 focus:bg-white transition-colors"
                             value={formData.eTransferId2}
                             onChange={e => setFormData({...formData, eTransferId2: e.target.value})}
                         />
@@ -310,7 +310,7 @@ const GiverRegistry: React.FC = () => {
                       <CreditCard className="absolute left-3 top-3.5 text-gray-400 w-4 h-4" />
                       <input 
                         placeholder="ID String"
-                        className="w-full pl-10 p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-church-500 bg-gray-50 focus:bg-white transition-colors"
+                        className="w-full pl-10 p-3 rounded-xl border border-gray-400 focus:ring-2 focus:ring-church-500 bg-gray-50 focus:bg-white transition-colors"
                         value={formData.pushPayId}
                         onChange={e => setFormData({...formData, pushPayId: e.target.value})}
                       />

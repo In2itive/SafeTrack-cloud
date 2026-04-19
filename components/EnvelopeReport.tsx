@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, forwardRef, useImperativeHandle } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../services/db';
@@ -8,8 +8,18 @@ import html2pdf from 'html2pdf.js';
 import { useAuth } from '../contexts/AuthContext';
 import { sendEmailWithPDF } from '../services/email';
 
-const EnvelopeReport: React.FC = () => {
-  const { batchId } = useParams();
+export interface ReportRef {
+  sendEmail: () => Promise<void>;
+}
+
+interface EnvelopeReportProps {
+  batchIdProp?: number;
+  hiddenMode?: boolean;
+}
+
+const EnvelopeReport = forwardRef<ReportRef, EnvelopeReportProps>(({ batchIdProp, hiddenMode }, ref) => {
+  const { batchId: routeBatchId } = useParams();
+  const batchId = batchIdProp ? batchIdProp.toString() : routeBatchId;
   const navigate = useNavigate();
   const { user, secondaryUser } = useAuth();
   const [givers, setGivers] = useState<Map<number, Giver>>(new Map());
@@ -90,14 +100,19 @@ const EnvelopeReport: React.FC = () => {
       const safeFilename = `Batch_${batch.id}_Envelopes.pdf`;
       
       await sendEmailWithPDF(pdfBlob, safeFilename, 'envelope');
-      alert('Email sent successfully!');
+      if (!hiddenMode) alert('Email sent successfully!');
     } catch (err: any) {
       console.error("Error sending email:", err);
-      alert(err.message || "There was an error sending the email.");
+      if (!hiddenMode) alert(err.message || "There was an error sending the email.");
+      throw err;
     } finally {
       setIsGenerating(false);
     }
   };
+
+  useImperativeHandle(ref, () => ({
+    sendEmail: handleShare
+  }));
 
   if (!batch || !donations) return <div className="p-8 text-center">Loading report...</div>;
 
@@ -157,41 +172,43 @@ const EnvelopeReport: React.FC = () => {
   const grandTotal = totalRegular + totalSpecial;
 
   return (
-    <div className="min-h-screen bg-gray-100 p-8 print:p-0 print:bg-white">
+    <div className={hiddenMode ? "" : "min-h-screen bg-gray-100 p-8 print:p-0 print:bg-white"}>
       {/* No-Print Header */}
-      <div className="max-w-4xl mx-auto mb-8 flex justify-between items-center print:hidden">
-        <button 
-          onClick={() => navigate('/history')}
-          className="flex items-center gap-2 text-gray-600 hover:text-gray-900 font-bold"
-        >
-          <ArrowLeft className="w-5 h-5" /> Back to History
-        </button>
-        <div className="flex gap-3">
+      {!hiddenMode && (
+        <div className="max-w-4xl mx-auto mb-8 flex justify-between items-center print:hidden">
           <button 
-            onClick={handleShare}
-            disabled={isGenerating}
-            className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 hover:bg-green-700 transition-colors disabled:opacity-50"
+            onClick={() => navigate('/history')}
+            className="flex items-center gap-2 text-gray-600 hover:text-gray-900 font-bold"
           >
-            <Mail className="w-4 h-4" />
-            {isGenerating ? 'Sending...' : 'Email Report'}
+            <ArrowLeft className="w-5 h-5" /> Back to History
           </button>
-          <button 
-            onClick={handleDownloadPDF}
-            disabled={isGenerating}
-            className="bg-church-900 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 hover:bg-church-800 transition-colors disabled:opacity-50"
-          >
-            <Download className="w-4 h-4" />
-            {isGenerating ? 'Generating...' : 'Download PDF'}
-          </button>
-          <button 
-            onClick={() => window.print()}
-            className="bg-blue-50 text-blue-800 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 hover:bg-blue-100 transition-colors"
-          >
-            <Printer className="w-4 h-4" />
-            Print
-          </button>
+          <div className="flex gap-3">
+            <button 
+              onClick={handleShare}
+              disabled={isGenerating}
+              className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 hover:bg-green-700 transition-colors disabled:opacity-50"
+            >
+              <Mail className="w-4 h-4" />
+              {isGenerating ? 'Sending...' : 'Email Report'}
+            </button>
+            <button 
+              onClick={handleDownloadPDF}
+              disabled={isGenerating}
+              className="bg-church-900 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 hover:bg-church-800 transition-colors disabled:opacity-50"
+            >
+              <Download className="w-4 h-4" />
+              {isGenerating ? 'Generating...' : 'Download PDF'}
+            </button>
+            <button 
+              onClick={() => window.print()}
+              className="bg-blue-50 text-blue-800 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 hover:bg-blue-100 transition-colors"
+            >
+              <Printer className="w-4 h-4" />
+              Print
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Report Paper */}
       <div ref={reportRef} className="max-w-4xl mx-auto bg-white p-12 rounded-3xl shadow-xl print:shadow-none print:p-8 print:max-w-none">
@@ -379,6 +396,6 @@ const EnvelopeReport: React.FC = () => {
       </div>
     </div>
   );
-};
+});
 
 export default EnvelopeReport;

@@ -2,9 +2,12 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../services/db';
 import { BatchStatus, PaymentMethod, BatchSource, UserRole } from '../types';
-import { FileText, Lock, CheckCircle, Banknote, ScrollText, Unlock, AlertTriangle, X, ShieldAlert, Edit, Smartphone, CreditCard, Users, FileSpreadsheet, Trash2 } from 'lucide-react';
+import { FileText, Lock, CheckCircle, Banknote, ScrollText, Unlock, AlertTriangle, X, ShieldAlert, Edit, Smartphone, CreditCard, Users, FileSpreadsheet, Trash2, Mail } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import AccountingReport, { ReportRef as AccountingRef } from './AccountingReport';
+import EnvelopeReport, { ReportRef as EnvelopeRef } from './EnvelopeReport';
+import DepositSlip, { ReportRef as DepositRef } from './DepositSlip';
 
 const BatchHistory: React.FC = () => {
   const navigate = useNavigate();
@@ -17,6 +20,11 @@ const BatchHistory: React.FC = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showUnlockModal, setShowUnlockModal] = useState(false);
   const [auditError, setAuditError] = useState<string | null>(null);
+  const [isEmailingAll, setIsEmailingAll] = useState(false);
+
+  const accountingRef = React.useRef<AccountingRef>(null);
+  const envelopeRef = React.useRef<EnvelopeRef>(null);
+  const depositRef = React.useRef<DepositRef>(null);
 
   // Fetch donations for the active batch for audit calculations
   const donations = useLiveQuery(() => 
@@ -25,16 +33,25 @@ const BatchHistory: React.FC = () => {
 
   const activeBatch = batches?.find(b => b.id === selectedBatchId);
 
+  // Auto-select latest batch on load
+  useEffect(() => {
+    if (batches && batches.length > 0 && selectedBatchId === null) {
+      setSelectedBatchId(batches[0].id!);
+    }
+  }, [batches, selectedBatchId]);
+
   // --- Audit State ---
   const [cashCounts, setCashCounts] = useState<Record<string, number>>({
     '100': 0, '50': 0, '20': 0, '10': 0, '5': 0, '2': 0, '1': 0, '0.25': 0, '0.10': 0, '0.05': 0
   });
   const [userCheckCount, setUserCheckCount] = useState<string>('');
+  const [userCheckAmount, setUserCheckAmount] = useState<string>('');
 
   // Reset state on batch change
   useEffect(() => {
     setCashCounts({ '100': 0, '50': 0, '20': 0, '10': 0, '5': 0, '2': 0, '1': 0, '0.25': 0, '0.10': 0, '0.05': 0 });
     setUserCheckCount('');
+    setUserCheckAmount('');
     setShowConfirmModal(false);
     setAuditError(null);
   }, [selectedBatchId]);
@@ -85,7 +102,10 @@ const BatchHistory: React.FC = () => {
   const isCashBalanced = isCashTotalBalanced && isCashCountsBalanced;
   
   const checkCountDiff = (parseInt(userCheckCount || '0')) - systemCheckCount;
-  const isCheckBalanced = checkCountDiff === 0;
+  const checkAmountDiff = (parseFloat(userCheckAmount || '0')) - systemCheckTotal;
+  const isCheckCountBalanced = checkCountDiff === 0;
+  const isCheckAmountBalanced = Math.abs(checkAmountDiff) < 0.01;
+  const isCheckBalanced = isCheckCountBalanced && isCheckAmountBalanced;
 
   const isReadyToFinalize = isCashBalanced && isCheckBalanced;
 
@@ -102,7 +122,8 @@ const BatchHistory: React.FC = () => {
         errors.push(`Cash value balanced, but denomination counts do not match expected system records.`);
       }
       
-      if (!isCheckBalanced) errors.push(`Cheque count mismatch (Off by ${checkCountDiff > 0 ? '+' : ''}${checkCountDiff}).`);
+      if (!isCheckCountBalanced) errors.push(`Cheque count mismatch (Off by ${checkCountDiff > 0 ? '+' : ''}${checkCountDiff}).`);
+      if (!isCheckAmountBalanced) errors.push(`Cheque amount mismatch (Off by $${checkAmountDiff > 0 ? '+' : ''}${checkAmountDiff.toFixed(2)}).`);
       
       setAuditError(errors.join(' '));
       return;
@@ -158,6 +179,22 @@ const BatchHistory: React.FC = () => {
     }
   };
 
+  const handleEmailAll = async () => {
+    if (!accountingRef.current || !envelopeRef.current || !depositRef.current) return;
+    setIsEmailingAll(true);
+    try {
+      await accountingRef.current.sendEmail();
+      await envelopeRef.current.sendEmail();
+      await depositRef.current.sendEmail();
+      alert('All reports emailed successfully!');
+    } catch (err: any) {
+      console.error("Failed to email all reports:", err);
+      alert("Failed to email some or all reports. Check console for details.");
+    } finally {
+      setIsEmailingAll(false);
+    }
+  };
+
   // Helper for source icon
   const getSourceIcon = (source: BatchSource) => {
     switch (source) {
@@ -178,10 +215,10 @@ const BatchHistory: React.FC = () => {
             <div 
               key={batch.id} 
               onClick={() => setSelectedBatchId(batch.id || null)}
-              className={`p-4 rounded-2xl cursor-pointer border transition-all ${
+              className={`p-4 rounded-2xl cursor-pointer transition-all ${
                 selectedBatchId === batch.id 
-                  ? 'bg-church-900 text-white shadow-xl scale-102 ring-2 ring-offset-2 ring-church-500' 
-                  : 'bg-white hover:bg-blue-50 border-gray-200'
+                  ? 'bg-church-900 text-white shadow-xl scale-[1.02] border border-church-900' 
+                  : 'bg-white hover:bg-blue-50 border border-gray-400'
               }`}
             >
               <div className="flex justify-between items-center mb-2">
@@ -220,12 +257,28 @@ const BatchHistory: React.FC = () => {
                            {getSourceIcon(activeBatch.source)} {activeBatch.source}
                         </span>
                      </div>
-                     <div className="flex gap-4 text-sm mt-2">
+                     <div className="flex items-center gap-4 text-sm mt-2">
                         <span className="text-gray-500">Date: <span className="font-semibold">{new Date(activeBatch.date).toLocaleDateString()}</span></span>
                         <span className="text-gray-500">Total: <span className="font-semibold text-church-900">${activeBatch.totalAmount.toFixed(2)}</span></span>
+                        {activeBatch.status === BatchStatus.Finalized && (
+                          <button
+                            onClick={handleEmailAll}
+                            disabled={isEmailingAll}
+                            className="flex items-center justify-center gap-2 w-56 py-2 bg-white border border-gray-400 text-gray-600 font-bold rounded-lg hover:bg-blue-50 hover:text-blue-700 hover:border-blue-400 transition-colors text-sm disabled:opacity-50"
+                          >
+                            <Mail className="w-6 h-6" /> {isEmailingAll ? 'Sending...' : 'Email All Reports'}
+                          </button>
+                        )}
                      </div>
                    </div>
                    
+                   {/* Hidden Reports for Emailing */}
+                   <div style={{ position: 'absolute', top: '-9999px', left: '-9999px', width: '1024px' }}>
+                     <AccountingReport ref={accountingRef} batchIdProp={activeBatch.id} hiddenMode={true} />
+                     <EnvelopeReport ref={envelopeRef} batchIdProp={activeBatch.id} hiddenMode={true} />
+                     <DepositSlip ref={depositRef} batchIdProp={activeBatch.id} hiddenMode={true} />
+                   </div>
+
                    {/* Batch Management Actions */}
                    <div className="flex items-center gap-2">
                      {activeBatch.status === BatchStatus.Open ? (
@@ -239,7 +292,7 @@ const BatchHistory: React.FC = () => {
                         </button>
                         <button 
                           onClick={() => navigate(`/batch-entry?batchId=${activeBatch.id}`)}
-                          className="flex items-center gap-2 px-4 py-3 rounded-xl font-bold bg-white border border-gray-200 text-gray-700 hover:bg-gray-100 shadow-sm transition-colors"
+                          className="flex items-center gap-2 px-4 py-3 rounded-xl font-bold bg-white border border-gray-400 text-gray-700 hover:bg-gray-100 shadow-sm transition-colors"
                         >
                           <Edit className="w-4 h-4" /> Edit Batch
                         </button>
@@ -267,7 +320,7 @@ const BatchHistory: React.FC = () => {
                          {user?.role === UserRole.Administrator && (
                            <button 
                              onClick={() => setShowUnlockModal(true)}
-                             className="flex items-center gap-2 px-4 py-2 rounded-xl font-bold bg-white border border-yellow-200 text-yellow-700 hover:bg-yellow-50 shadow-sm transition-colors"
+                             className="flex items-center gap-2 px-4 py-2 rounded-xl font-bold bg-white border border-yellow-400 text-yellow-700 hover:bg-yellow-50 shadow-sm transition-colors"
                              title="Unlock Batch (Admin Only)"
                            >
                              <Unlock className="w-4 h-4" /> Unlock
@@ -286,20 +339,20 @@ const BatchHistory: React.FC = () => {
                     <span className="text-xs font-bold text-gray-400 uppercase mr-2 tracking-wider">Reports:</span>
                     <button 
                       onClick={() => navigate(`/reports/accounting/${activeBatch.id}`)}
-                      className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-600 font-bold rounded-lg hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 transition-colors text-sm"
+                      className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-400 text-gray-600 font-bold rounded-lg hover:bg-blue-50 hover:text-blue-700 hover:border-blue-400 transition-colors text-sm"
                     >
                       <FileSpreadsheet className="w-4 h-4" /> Accounting
                     </button>
                     <button 
                       onClick={() => navigate(`/reports/envelope/${activeBatch.id}`)}
-                      className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-600 font-bold rounded-lg hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 transition-colors text-sm"
+                      className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-400 text-gray-600 font-bold rounded-lg hover:bg-blue-50 hover:text-blue-700 hover:border-blue-400 transition-colors text-sm"
                     >
                       <Users className="w-4 h-4" /> Envelope
                     </button>
                     {activeBatch.status === BatchStatus.Finalized && (
                       <button 
                         onClick={() => navigate(`/reports/deposit-slip/${activeBatch.id}`)}
-                        className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-600 font-bold rounded-lg hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 transition-colors text-sm"
+                        className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-400 text-gray-600 font-bold rounded-lg hover:bg-blue-50 hover:text-blue-700 hover:border-blue-400 transition-colors text-sm"
                       >
                         <ScrollText className="w-4 h-4" /> Deposit Slip
                       </button>
@@ -346,7 +399,7 @@ const BatchHistory: React.FC = () => {
                                   type="number" 
                                   min="0"
                                   disabled={activeBatch.status === BatchStatus.Finalized}
-                                  className={`w-full p-2 rounded-lg border text-center outline-none focus:ring-2 focus:ring-church-500 font-bold ${match ? 'bg-white border-gray-200 text-gray-800' : 'bg-red-50 border-red-300 text-red-600'}`}
+                                  className={`w-full p-2 rounded-lg border text-center outline-none focus:ring-2 focus:ring-church-500 font-bold ${match ? 'bg-white border-gray-400 text-gray-800' : 'bg-red-50 border-red-300 text-red-600'}`}
                                   value={cashCounts[denom.toString()] || ''}
                                   onChange={(e) => setCashCounts({...cashCounts, [denom.toString()]: parseInt(e.target.value) || 0})}
                                 />
@@ -372,30 +425,54 @@ const BatchHistory: React.FC = () => {
                             <FileText className="w-5 h-5 text-church-500" /> Cheque Audit
                           </h4>
                           <div className={`text-sm px-3 py-1 rounded-lg font-bold ${isCheckBalanced ? 'text-green-700 bg-green-100' : 'text-red-600 bg-red-100'}`}>
-                             {isCheckBalanced ? 'Balanced' : `Count Variance: ${checkCountDiff > 0 ? '+' : ''}${checkCountDiff}`}
+                             {isCheckBalanced ? 'Balanced' : (!isCheckCountBalanced ? `Count Variance: ${checkCountDiff > 0 ? '+' : ''}${checkCountDiff}` : `Amount Variance: $${checkAmountDiff > 0 ? '+' : ''}${checkAmountDiff.toFixed(2)}`)}
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-6">
-                          <div className="flex-1">
-                            <label className="block text-sm font-medium text-gray-500 mb-1">Physical Cheque Count</label>
-                            <input 
-                               type="number" 
-                               placeholder="Enter total cheques..."
-                               disabled={activeBatch.status === BatchStatus.Finalized}
-                               className="w-full p-3 rounded-xl border border-gray-200 text-lg font-bold bg-white focus:ring-2 focus:ring-church-500 outline-none"
-                               value={userCheckCount}
-                               onChange={(e) => setUserCheckCount(e.target.value)}
-                            />
-                          </div>
-                          <div className="text-right">
-                             <div className="text-sm text-gray-500">System Count</div>
-                             <div className="text-2xl font-bold text-gray-800">{systemCheckCount}</div>
-                          </div>
-                          <div className="text-right">
-                             <div className="text-sm text-gray-500">Total Value</div>
-                             <div className="text-2xl font-bold text-church-900">${systemCheckTotal.toFixed(2)}</div>
-                          </div>
+                        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                          <table className="w-full text-left">
+                            <thead className="bg-gray-50 text-gray-500 text-sm">
+                              <tr>
+                                <th className="p-3 pl-4 font-medium w-1/3">Type</th>
+                                <th className="p-3 font-medium w-1/3">Audit Total</th>
+                                <th className="p-3 pr-4 font-medium text-right w-1/3">System Total</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                              <tr className="hover:bg-gray-50/50 transition-colors">
+                                <td className="p-3 pl-4 font-medium text-gray-700">Physical Cheques</td>
+                                <td className="p-3">
+                                  <input 
+                                    type="number" 
+                                    placeholder="Count..."
+                                    disabled={activeBatch.status === BatchStatus.Finalized}
+                                    className="w-full max-w-[180px] p-2 rounded-lg border border-gray-400 font-bold bg-white focus:ring-2 focus:ring-church-500 outline-none"
+                                    value={userCheckCount}
+                                    onChange={(e) => setUserCheckCount(e.target.value)}
+                                  />
+                                </td>
+                                <td className="p-3 pr-4 text-right text-xl font-bold text-gray-800">{systemCheckCount}</td>
+                              </tr>
+                              <tr className="hover:bg-gray-50/50 transition-colors">
+                                <td className="p-3 pl-4 font-medium text-gray-700">Total Amount</td>
+                                <td className="p-3">
+                                  <div className="relative max-w-[180px]">
+                                    <span className="absolute left-3 top-2.5 text-gray-400 font-bold">$</span>
+                                    <input 
+                                      type="number" 
+                                      step="0.01"
+                                      placeholder="0.00"
+                                      disabled={activeBatch.status === BatchStatus.Finalized}
+                                      className="w-full pl-7 p-2 rounded-lg border border-gray-400 font-bold bg-white focus:ring-2 focus:ring-church-500 outline-none"
+                                      value={userCheckAmount}
+                                      onChange={(e) => setUserCheckAmount(e.target.value)}
+                                    />
+                                  </div>
+                                </td>
+                                <td className="p-3 pr-4 text-right text-xl font-bold text-church-900">${systemCheckTotal.toFixed(2)}</td>
+                              </tr>
+                            </tbody>
+                          </table>
                         </div>
 
                         {/* Deposit Slip / Check List */}

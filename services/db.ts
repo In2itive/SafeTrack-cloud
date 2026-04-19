@@ -1,5 +1,6 @@
 import Dexie, { type Table } from 'dexie';
 import { Giver, Batch, Donation, AppSettings, BatchSource, FundEntity, User, InternalAccount } from '../types';
+import { hashPassword } from '../utils/auth';
 
 class ChurchDatabase extends Dexie {
   givers!: Table<Giver, number>;
@@ -49,6 +50,23 @@ class ChurchDatabase extends Dexie {
     // Version 6: Add internalAccounts table
     (this as any).version(6).stores({
       internalAccounts: '++id, name, isActive'
+    });
+
+    // Version 7: Hash clear text passwords
+    (this as any).version(7).stores({
+      users: '++id, username, email, role'
+    }).upgrade(async (trans: any) => {
+      const users = await trans.table("users").toArray();
+      for (const user of users) {
+        if (user.password && !user.passwordHash) {
+          user.passwordHash = await hashPassword(user.password);
+          delete user.password;
+          await trans.table("users").put(user);
+        } else if (user.password) {
+          delete user.password;
+          await trans.table("users").put(user);
+        }
+      }
     });
   }
 }
@@ -101,6 +119,7 @@ export const exportData = async (): Promise<string> => {
   const allSettings = await db.settings.toArray();
   const allFunds = await db.funds.toArray();
   const allInternalAccounts = await db.internalAccounts.toArray();
+  const allUsers = await db.users.toArray();
   
   return JSON.stringify({ 
     givers: allGivers, 
@@ -108,20 +127,22 @@ export const exportData = async (): Promise<string> => {
     donations: allDonations, 
     settings: allSettings,
     funds: allFunds,
-    internalAccounts: allInternalAccounts
+    internalAccounts: allInternalAccounts,
+    users: allUsers
   });
 };
 
 export const importData = async (jsonString: string) => {
   const data = JSON.parse(jsonString);
   // Cast 'db' to any to avoid TS error: Property 'transaction' does not exist on type 'ChurchDatabase'
-  await (db as any).transaction('rw', db.givers, db.batches, db.donations, db.settings, db.funds, db.internalAccounts, async () => {
+  await (db as any).transaction('rw', db.givers, db.batches, db.donations, db.settings, db.funds, db.internalAccounts, db.users, async () => {
     await db.givers.clear();
     await db.batches.clear();
     await db.donations.clear();
     await db.settings.clear();
     await db.funds.clear();
     await db.internalAccounts.clear();
+    await db.users.clear();
 
     if(data.givers) await db.givers.bulkAdd(data.givers);
     if(data.batches) await db.batches.bulkAdd(data.batches);
@@ -129,6 +150,7 @@ export const importData = async (jsonString: string) => {
     if(data.settings) await db.settings.bulkAdd(data.settings);
     if(data.funds) await db.funds.bulkAdd(data.funds);
     if(data.internalAccounts) await db.internalAccounts.bulkAdd(data.internalAccounts);
+    if(data.users) await db.users.bulkAdd(data.users);
   });
 };
 

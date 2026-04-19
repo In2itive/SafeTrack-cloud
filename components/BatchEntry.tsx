@@ -32,12 +32,14 @@ const FUND_INTERNAL = 'Internal';
 const GiverInput: React.FC<{
   rowId: number;
   value: string;
+  isLocked: boolean;
   onChange: (val: string) => void;
   onSelect: (giver: Giver | { id: number, name: string, name2?: string, envelopeNumber: number }) => void;
   onCreate: (name: string) => void;
+  onClear: () => void;
   givers: Giver[];
   autoFocus?: boolean;
-}> = ({ rowId, value, onChange, onSelect, onCreate, givers, autoFocus }) => {
+}> = ({ rowId, value, isLocked, onChange, onSelect, onCreate, onClear, givers, autoFocus }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -101,18 +103,29 @@ const GiverInput: React.FC<{
     }
   };
 
-  // Handle "Loose Giving" (0) and "Internal" (1) specifically
-  // REMOVED: Auto-selection prevented typing larger numbers (e.g. 100)
-  // Users must now select from the dropdown
-  /*
-  useEffect(() => {
-    if (value === '0') {
-      onSelect({ id: 0, name: 'Loose Giving', envelopeNumber: 0 });
-    } else if (value === '1') {
-      onSelect({ id: -1, name: 'Internal', envelopeNumber: 1 });
-    }
-  }, [value]);
-  */
+  if (isLocked) {
+    return (
+      <div className="relative w-full">
+        <div className="absolute left-3 top-2.5 w-4 h-4 text-church-500">
+           <Check className="w-4 h-4" />
+        </div>
+        <input
+          type="text"
+          readOnly
+          className="w-full pl-9 pr-10 py-2 rounded-lg border border-green-400 bg-green-50 text-green-900 outline-none text-sm font-bold cursor-default"
+          value={value}
+        />
+        <button
+          type="button"
+          onClick={onClear}
+          className="absolute right-2 top-1.5 p-1 text-gray-400 hover:text-red-500 rounded-full hover:bg-red-50 transition-colors"
+          title="Clear Selection"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="relative w-full">
@@ -121,7 +134,7 @@ const GiverInput: React.FC<{
         <input
           ref={inputRef}
           type="text"
-          className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-200 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-church-500 outline-none text-sm font-medium"
+          className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-400 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-church-500 outline-none text-sm font-medium"
           placeholder="Env #, Name, or ID"
           value={value}
           onChange={(e) => {
@@ -130,7 +143,7 @@ const GiverInput: React.FC<{
             setActiveIndex(0);
           }}
           onFocus={() => setIsOpen(true)}
-          onBlur={() => setTimeout(() => setIsOpen(false), 200)} // Delay to allow click
+          onBlur={() => setTimeout(() => setIsOpen(false), 200)}
           onKeyDown={handleKeyDown}
           autoFocus={autoFocus}
         />
@@ -212,7 +225,7 @@ const InternalAccountInput: React.FC<{
       <input
         ref={inputRef}
         type="text"
-        className="w-full p-2 rounded-xl border border-gray-200 bg-white text-sm font-bold text-gray-800 focus:ring-2 focus:ring-church-500 outline-none uppercase transition-all placeholder:font-normal placeholder:text-gray-400 placeholder:normal-case"
+        className="w-full p-2 rounded-xl border border-gray-400 bg-white text-sm font-bold text-gray-800 focus:ring-2 focus:ring-church-500 outline-none uppercase transition-all placeholder:font-normal placeholder:text-gray-400 placeholder:normal-case"
         placeholder="Enter account code"
         value={value}
         onChange={(e) => {
@@ -433,6 +446,7 @@ const BatchEntry: React.FC = () => {
     }
 
     updateRow(rowId, updates);
+    setTimeout(() => document.getElementById(`amount-${rowId}`)?.focus(), 50);
   };
 
   const handleCreateGiverStart = (rowId: number, name: string) => {
@@ -661,11 +675,11 @@ const BatchEntry: React.FC = () => {
             type="date" 
             value={date} 
             onChange={(e) => setDate(e.target.value)}
-            className="border-gray-200 border rounded-lg p-2 bg-gray-50 text-gray-800"
+            className="border-gray-400 border rounded-lg p-2 bg-gray-50 text-gray-800"
           />
         </div>
 
-        <div className="flex-1 overflow-visible overflow-y-auto min-h-[300px] pb-32">
+        <div className="flex-1 overflow-visible overflow-y-auto min-h-[300px] pb-4">
           <table className="w-full text-left border-collapse">
             <thead className="bg-gray-50 sticky top-0 z-40 text-gray-600">
               <tr>
@@ -689,9 +703,11 @@ const BatchEntry: React.FC = () => {
                       <GiverInput 
                         rowId={row.id}
                         value={row.inputValue}
+                        isLocked={row.giverId !== undefined}
                         onChange={(val) => updateRow(row.id, { inputValue: val, giverId: undefined })}
                         onSelect={(g) => handleGiverSelect(row.id, g)}
                         onCreate={(name) => handleCreateGiverStart(row.id, name)}
+                        onClear={() => updateRow(row.id, { giverId: undefined, inputValue: '' })}
                         givers={allGivers}
                         autoFocus={index === rows.length - 1 && index > 0}
                       />
@@ -702,9 +718,10 @@ const BatchEntry: React.FC = () => {
                       <div className="relative">
                         <span className="absolute left-3 top-2 text-gray-400 font-bold">$</span>
                         <input 
+                          id={`amount-${row.id}`}
                           type="number"
                           step="0.01"
-                          className={`w-full pl-6 p-2 rounded-lg border text-sm font-bold outline-none focus:ring-2 focus:ring-church-500 ${isUnbalanced ? 'border-red-300 bg-red-50 text-red-600' : 'border-gray-200 bg-gray-50 text-gray-800'}`}
+                          className={`w-full pl-6 p-2 rounded-lg border text-sm font-bold outline-none focus:ring-2 focus:ring-church-500 ${isUnbalanced ? 'border-red-300 bg-red-50 text-red-600' : 'border-gray-400 bg-gray-50 text-gray-800'}`}
                           value={row.amount}
                           onChange={(e) => updateRow(row.id, { amount: e.target.value })}
                           placeholder="0.00"
@@ -716,7 +733,7 @@ const BatchEntry: React.FC = () => {
                     <td className="p-2">
                        <div className="flex gap-2">
                         <select 
-                          className={`p-2 rounded-lg border border-gray-200 bg-gray-50 text-sm outline-none focus:ring-2 focus:ring-church-500 transition-all ${row.method === PaymentMethod.Cheque ? 'w-1/2' : 'flex-1'}`}
+                          className={`p-2 rounded-lg border border-gray-400 bg-gray-50 text-sm outline-none focus:ring-2 focus:ring-church-500 transition-all ${row.method === PaymentMethod.Cheque ? 'w-1/2' : 'flex-1'}`}
                           value={row.method}
                           onChange={(e) => updateRow(row.id, { method: e.target.value as PaymentMethod })}
                         >
@@ -728,7 +745,7 @@ const BatchEntry: React.FC = () => {
                           <input 
                             type="text" 
                             placeholder="Chq #" 
-                            className="w-1/2 p-2 rounded-lg border border-gray-200 bg-gray-50 text-sm outline-none focus:ring-2 focus:ring-church-500"
+                            className="w-1/2 p-2 rounded-lg border border-gray-400 bg-gray-50 text-sm outline-none focus:ring-2 focus:ring-church-500"
                             value={row.chequeNumber}
                             onChange={(e) => updateRow(row.id, { chequeNumber: e.target.value })}
                           />
@@ -738,7 +755,7 @@ const BatchEntry: React.FC = () => {
                         {row.method === PaymentMethod.Cash && (
                           <button 
                             onClick={() => setCashRowId(row.id)}
-                            className={`p-2 rounded-lg transition-colors border ${cashMismatch ? 'bg-red-100 text-red-500 border-red-200' : 'bg-gray-100 text-gray-400 hover:bg-church-100 hover:text-church-500 border-gray-200'}`}
+                            className={`p-2 rounded-lg transition-colors border ${cashMismatch ? 'bg-red-100 text-red-500 border-red-400' : 'bg-gray-100 text-gray-400 hover:bg-church-100 hover:text-church-500 border-gray-400'}`}
                             title="Cash Denominations"
                             tabIndex={-1}
                           >
@@ -755,8 +772,8 @@ const BatchEntry: React.FC = () => {
                         onKeyDown={(e) => handleKeyDown(e, index)}
                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium border transition-all flex items-center justify-between outline-none focus:ring-2 focus:ring-church-500 ${
                           isUnbalanced 
-                            ? 'bg-red-50 border-red-200 text-red-700' 
-                            : 'bg-white border-gray-200 text-gray-600 hover:border-church-500'
+                            ? 'bg-red-50 border-red-400 text-red-700' 
+                            : 'bg-white border-gray-400 text-gray-600 hover:border-church-500'
                         }`}
                       >
                         <div className="flex items-center gap-2">
@@ -793,7 +810,7 @@ const BatchEntry: React.FC = () => {
           {/* Add Row Button (Bottom) */}
           <button 
             onClick={addRow}
-            className="w-full mt-2 py-3 border-2 border-dashed border-gray-200 rounded-xl text-gray-400 font-bold hover:border-church-500 hover:text-church-500 transition-all flex justify-center items-center gap-2"
+            className="w-full mt-2 py-3 border-2 border-dashed border-gray-400 rounded-xl text-gray-400 font-bold hover:border-church-500 hover:text-church-500 transition-all flex justify-center items-center gap-2"
           >
             <Plus className="w-5 h-5" /> Add New Row (Auto-Saves Batch)
           </button>
@@ -924,7 +941,7 @@ const QuickAddGiverModal: React.FC<{ name: string, onClose: () => void, onSave: 
           <input 
             type="text" 
             placeholder="Enter address from cheque..." 
-            className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-church-500 outline-none text-sm"
+            className="w-full p-3 rounded-xl border border-gray-400 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-church-500 outline-none text-sm"
             value={address}
             onChange={(e) => setAddress(e.target.value)}
           />
@@ -1033,7 +1050,7 @@ const SplitModal: React.FC<{ row: Row, internalAccounts: { id?: number, name: st
             {splits.map((split, idx) => (
               <div key={idx} className={`rounded-xl p-3 border transition-colors ${split.fund === FUND_INTERNAL ? 'bg-blue-50/50 border-blue-200' : 'bg-gray-50 border-gray-100'}`}>
                 <div className="flex gap-2 items-center">
-                  <select className="flex-1 p-2 rounded-xl border border-gray-200 bg-white text-sm focus:ring-2 focus:ring-church-500 outline-none" value={split.fund} onChange={(e) => updateSplit(idx, 'fund', e.target.value)}>
+                  <select className="flex-1 p-2 rounded-xl border border-gray-400 bg-white text-sm focus:ring-2 focus:ring-church-500 outline-none" value={split.fund} onChange={(e) => updateSplit(idx, 'fund', e.target.value)}>
                     {funds.map(f => <option key={f.id} value={f.name}>{f.name}</option>)}
                     {/* Fallback if current split has an inactive fund not in list */}
                     {!funds.find(f => f.name === split.fund) && <option value={split.fund}>{split.fund}</option>}
@@ -1043,7 +1060,7 @@ const SplitModal: React.FC<{ row: Row, internalAccounts: { id?: number, name: st
                     <input 
                         type="number" 
                         step="0.01" 
-                        className="w-full pl-6 p-2 rounded-xl border border-gray-200 bg-white font-bold focus:ring-2 focus:ring-church-500 outline-none" 
+                        className="w-full pl-6 p-2 rounded-xl border border-gray-400 bg-white font-bold focus:ring-2 focus:ring-church-500 outline-none" 
                         value={split.amount} 
                         onChange={(e) => updateSplit(idx, 'amount', e.target.value)} 
                     />
@@ -1063,8 +1080,8 @@ const SplitModal: React.FC<{ row: Row, internalAccounts: { id?: number, name: st
               </div>
             ))}
           </div>
-          <button onClick={() => setSplits([...splits, { fund: 'General', amount: '' }])} className="w-full py-2 border-2 border-dashed border-gray-300 rounded-xl text-gray-400 font-bold hover:border-church-500 hover:text-church-500 transition-colors mb-6">+ Add Fund</button>
-          <button disabled={!isBalanced} onClick={handleSave} className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 ${isBalanced ? 'bg-church-900 text-white' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}><Check className="w-5 h-5" /> Confirm Splits</button>
+          <button onClick={() => setSplits([...splits, { fund: 'General', amount: '' }])} className="w-full py-2 border-2 border-dashed border-gray-500 rounded-xl text-gray-400 font-bold hover:border-church-500 hover:text-church-500 transition-colors mb-6">+ Add Fund</button>
+          <button disabled={!isBalanced} onClick={handleSave} className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 ${isBalanced ? 'bg-church-900 text-white' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}><Check className="w-5 h-5" /> Confirm</button>
         </div>
       </div>
     </div>
@@ -1091,7 +1108,7 @@ const CashModal: React.FC<{ row: Row, onClose: () => void, onSave: (c: Record<st
              {DENOMINATIONS.map(denom => (
                <div key={denom} className="bg-gray-50 p-3 rounded-xl border border-gray-100 text-center">
                  <label className="text-xs font-bold text-gray-400 block mb-1">${denom}</label>
-                 <input type="number" min="0" className="w-full p-1 bg-white border border-gray-200 rounded-lg text-center font-bold text-lg focus:ring-2 focus:ring-green-500 outline-none" 
+                 <input type="number" min="0" className="w-full p-1 bg-white border border-gray-400 rounded-lg text-center font-bold text-lg focus:ring-2 focus:ring-green-500 outline-none" 
                    value={counts[denom] || ''} onChange={(e) => setCounts({...counts, [denom]: parseInt(e.target.value) || 0})} autoFocus={denom === 100} />
                </div>
              ))}

@@ -11,6 +11,7 @@ const UserManagement = () => {
   const users = useLiveQuery(() => db.users.toArray());
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [userToDelete, setUserToDelete] = useState<number | null>(null);
   const [formData, setFormData] = useState({
     username: '',
     name: '',
@@ -54,9 +55,14 @@ const UserManagement = () => {
     setIsModalOpen(true);
   };
 
-  const handleDelete = async (id: number) => {
-    if (window.confirm('Are you sure you want to delete this user?')) {
-      await db.users.delete(id);
+  const handleDelete = (id: number) => {
+    setUserToDelete(id);
+  };
+
+  const confirmDelete = async () => {
+    if (userToDelete) {
+      await db.users.delete(userToDelete);
+      setUserToDelete(null);
     }
   };
 
@@ -190,7 +196,7 @@ const UserManagement = () => {
                   <input
                     type="text"
                     required
-                    className="w-full pl-9 p-2.5 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-church-500 outline-none text-sm"
+                    className="w-full pl-9 p-2.5 rounded-xl border border-gray-400 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-church-500 outline-none text-sm"
                     value={formData.name}
                     onChange={e => setFormData({...formData, name: e.target.value})}
                   />
@@ -204,7 +210,7 @@ const UserManagement = () => {
                   <input
                     type="text"
                     required
-                    className="w-full pl-9 p-2.5 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-church-500 outline-none text-sm"
+                    className="w-full pl-9 p-2.5 rounded-xl border border-gray-400 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-church-500 outline-none text-sm"
                     value={formData.username}
                     onChange={e => setFormData({...formData, username: e.target.value})}
                   />
@@ -218,7 +224,7 @@ const UserManagement = () => {
                   <input
                     type="email"
                     required
-                    className="w-full pl-9 p-2.5 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-church-500 outline-none text-sm"
+                    className="w-full pl-9 p-2.5 rounded-xl border border-gray-400 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-church-500 outline-none text-sm"
                     value={formData.email}
                     onChange={e => setFormData({...formData, email: e.target.value})}
                   />
@@ -230,7 +236,7 @@ const UserManagement = () => {
                 <div className="relative">
                   <Shield className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
                   <select
-                    className="w-full pl-9 p-2.5 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-church-500 outline-none text-sm appearance-none"
+                    className="w-full pl-9 p-2.5 rounded-xl border border-gray-400 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-church-500 outline-none text-sm appearance-none"
                     value={formData.role}
                     onChange={e => setFormData({...formData, role: e.target.value as UserRole})}
                   >
@@ -249,7 +255,7 @@ const UserManagement = () => {
                   <Lock className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
                   <input
                     type="password"
-                    className="w-full pl-9 p-2.5 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-church-500 outline-none text-sm"
+                    className="w-full pl-9 p-2.5 rounded-xl border border-gray-400 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-church-500 outline-none text-sm"
                     placeholder={editingUser ? "Leave blank to keep current" : "••••••••"}
                     value={formData.password}
                     onChange={e => setFormData({...formData, password: e.target.value})}
@@ -264,6 +270,37 @@ const UserManagement = () => {
                 <Check className="w-5 h-5" /> Save User
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {userToDelete && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl animate-fade-in-up border border-gray-100">
+            <div className="flex justify-center mb-4">
+              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                <Trash2 className="w-6 h-6 text-red-600" />
+              </div>
+            </div>
+            <h3 className="text-xl font-bold text-center text-gray-800 mb-2">Delete User</h3>
+            <p className="text-center text-gray-600 mb-6">
+              Are you sure you want to delete this user? This action cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setUserToDelete(null)}
+                className="flex-1 py-3 rounded-xl font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="flex-1 py-3 rounded-xl font-bold bg-red-600 text-white hover:bg-red-700 transition-colors shadow-lg shadow-red-200"
+              >
+                Delete
+              </button>
+            </div>
           </div>
         </div>
       )}

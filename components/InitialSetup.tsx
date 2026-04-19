@@ -52,7 +52,7 @@ const InitialSetup = () => {
               <input
                 type="text"
                 required
-                className="w-full pl-10 p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-church-500 outline-none"
+                className="w-full pl-10 p-3 rounded-xl border border-gray-400 focus:ring-2 focus:ring-church-500 outline-none"
                 placeholder="John Doe"
                 value={formData.name}
                 onChange={e => setFormData({...formData, name: e.target.value})}
@@ -67,7 +67,7 @@ const InitialSetup = () => {
               <input
                 type="text"
                 required
-                className="w-full pl-10 p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-church-500 outline-none"
+                className="w-full pl-10 p-3 rounded-xl border border-gray-400 focus:ring-2 focus:ring-church-500 outline-none"
                 placeholder="jdoe"
                 value={formData.username}
                 onChange={e => setFormData({...formData, username: e.target.value})}
@@ -82,7 +82,7 @@ const InitialSetup = () => {
               <input
                 type="email"
                 required
-                className="w-full pl-10 p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-church-500 outline-none"
+                className="w-full pl-10 p-3 rounded-xl border border-gray-400 focus:ring-2 focus:ring-church-500 outline-none"
                 placeholder="john@example.com"
                 value={formData.email}
                 onChange={e => setFormData({...formData, email: e.target.value})}
@@ -97,7 +97,7 @@ const InitialSetup = () => {
               <input
                 type="password"
                 required
-                className="w-full pl-10 p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-church-500 outline-none"
+                className="w-full pl-10 p-3 rounded-xl border border-gray-400 focus:ring-2 focus:ring-church-500 outline-none"
                 placeholder="••••••••"
                 value={formData.password}
                 onChange={e => setFormData({...formData, password: e.target.value})}
@@ -112,7 +112,7 @@ const InitialSetup = () => {
               <input
                 type="password"
                 required
-                className="w-full pl-10 p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-church-500 outline-none"
+                className="w-full pl-10 p-3 rounded-xl border border-gray-400 focus:ring-2 focus:ring-church-500 outline-none"
                 placeholder="••••••••"
                 value={formData.confirmPassword}
                 onChange={e => setFormData({...formData, confirmPassword: e.target.value})}

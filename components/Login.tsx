@@ -70,7 +70,7 @@ const Login = () => {
               <input
                 type="text"
                 required
-                className="w-full pl-10 p-3 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-church-500 outline-none transition-all"
+                className="w-full pl-10 p-3 rounded-xl border border-gray-400 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-church-500 outline-none transition-all"
                 placeholder={isSecondaryLogin ? "Enter second username" : "Enter your username"}
                 value={formData.username}
                 onChange={e => setFormData({...formData, username: e.target.value})}
@@ -85,7 +85,7 @@ const Login = () => {
               <input
                 type="password"
                 required
-                className="w-full pl-10 p-3 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-church-500 outline-none transition-all"
+                className="w-full pl-10 p-3 rounded-xl border border-gray-400 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-church-500 outline-none transition-all"
                 placeholder="••••••••"
                 value={formData.password}
                 onChange={e => setFormData({...formData, password: e.target.value})}

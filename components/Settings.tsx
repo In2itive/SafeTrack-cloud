@@ -276,7 +276,7 @@ const Settings: React.FC = () => {
             <label className="block text-sm font-medium text-gray-700 mb-2">Next Auto-Increment Envelope #</label>
             <input 
               type="number" 
-              className="w-full p-4 rounded-xl border border-gray-200 text-2xl font-bold text-church-900 focus:ring-2 focus:ring-church-500 bg-gray-50"
+              className="w-full p-4 rounded-xl border border-gray-400 text-2xl font-bold text-church-900 focus:ring-2 focus:ring-church-500 bg-gray-50"
               value={settings?.nextEnvelopeNumber || 100}
               onChange={(e) => updateEnvelope(e.target.value)}
             />
@@ -316,7 +316,7 @@ const Settings: React.FC = () => {
                     <span className="text-[10px]">No Image</span>
                   </div>
                 )}
-                <label className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 cursor-pointer transition-colors">
+                <label className="bg-white border border-gray-500 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 cursor-pointer transition-colors">
                   Upload Logo
                   <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, 'bankLogo')} />
                 </label>
@@ -327,7 +327,7 @@ const Settings: React.FC = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">Account Of</label>
               <input 
                 type="text" 
-                className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 focus:ring-2 focus:ring-church-500"
+                className="w-full p-3 rounded-xl border border-gray-400 bg-gray-50 focus:ring-2 focus:ring-church-500"
                 value={settings?.accountOf || ''}
                 onChange={(e) => updateSettings({ accountOf: e.target.value })}
                 placeholder="First Church of Example"
@@ -339,7 +339,7 @@ const Settings: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Branch #</label>
                 <input 
                   type="text" 
-                  className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 focus:ring-2 focus:ring-church-500"
+                  className="w-full p-3 rounded-xl border border-gray-400 bg-gray-50 focus:ring-2 focus:ring-church-500"
                   value={settings?.branchNumber || ''}
                   onChange={(e) => updateSettings({ branchNumber: e.target.value })}
                   placeholder="12345"
@@ -349,7 +349,7 @@ const Settings: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Account #</label>
                 <input 
                   type="text" 
-                  className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 focus:ring-2 focus:ring-church-500"
+                  className="w-full p-3 rounded-xl border border-gray-400 bg-gray-50 focus:ring-2 focus:ring-church-500"
                   value={settings?.accountNumber || ''}
                   onChange={(e) => updateSettings({ accountNumber: e.target.value })}
                   placeholder="000-1234567"
@@ -382,7 +382,7 @@ const Settings: React.FC = () => {
                     <span className="text-[10px]">No Image</span>
                   </div>
                 )}
-                <label className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 cursor-pointer transition-colors">
+                <label className="bg-white border border-gray-500 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 cursor-pointer transition-colors">
                   Upload Logo
                   <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, 'churchLogo')} />
                 </label>
@@ -393,7 +393,7 @@ const Settings: React.FC = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">Address Line 1</label>
               <input 
                 type="text" 
-                className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 focus:ring-2 focus:ring-church-500"
+                className="w-full p-3 rounded-xl border border-gray-400 bg-gray-50 focus:ring-2 focus:ring-church-500"
                 value={settings?.churchAddressLine1 || ''}
                 onChange={(e) => updateSettings({ churchAddressLine1: e.target.value })}
                 placeholder="123 Main St"
@@ -403,7 +403,7 @@ const Settings: React.FC = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">Address Line 2</label>
               <input 
                 type="text" 
-                className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 focus:ring-2 focus:ring-church-500"
+                className="w-full p-3 rounded-xl border border-gray-400 bg-gray-50 focus:ring-2 focus:ring-church-500"
                 value={settings?.churchAddressLine2 || ''}
                 onChange={(e) => updateSettings({ churchAddressLine2: e.target.value })}
                 placeholder="Suite 100"
@@ -413,7 +413,7 @@ const Settings: React.FC = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">Address Line 3</label>
               <input 
                 type="text" 
-                className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 focus:ring-2 focus:ring-church-500"
+                className="w-full p-3 rounded-xl border border-gray-400 bg-gray-50 focus:ring-2 focus:ring-church-500"
                 value={settings?.churchAddressLine3 || ''}
                 onChange={(e) => updateSettings({ churchAddressLine3: e.target.value })}
                 placeholder="City, State, ZIP"
@@ -434,7 +434,7 @@ const Settings: React.FC = () => {
             <label className="block text-sm font-medium text-gray-700 mb-2">SMTP Host</label>
             <input 
               type="text" 
-              className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 focus:ring-2 focus:ring-church-500"
+              className="w-full p-3 rounded-xl border border-gray-400 bg-gray-50 focus:ring-2 focus:ring-church-500"
               value={settings?.smtpHost || ''}
               onChange={(e) => updateSettings({ smtpHost: e.target.value })}
               placeholder="smtp.example.com"
@@ -444,7 +444,7 @@ const Settings: React.FC = () => {
             <label className="block text-sm font-medium text-gray-700 mb-2">SMTP Port</label>
             <input 
               type="number" 
-              className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 focus:ring-2 focus:ring-church-500"
+              className="w-full p-3 rounded-xl border border-gray-400 bg-gray-50 focus:ring-2 focus:ring-church-500"
               value={settings?.smtpPort || ''}
               onChange={(e) => updateSettings({ smtpPort: parseInt(e.target.value) || undefined })}
               placeholder="587"
@@ -454,7 +454,7 @@ const Settings: React.FC = () => {
             <label className="block text-sm font-medium text-gray-700 mb-2">SMTP Username</label>
             <input 
               type="text" 
-              className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 focus:ring-2 focus:ring-church-500"
+              className="w-full p-3 rounded-xl border border-gray-400 bg-gray-50 focus:ring-2 focus:ring-church-500"
               value={settings?.smtpUser || ''}
               onChange={(e) => updateSettings({ smtpUser: e.target.value })}
               placeholder="user@example.com"
@@ -464,7 +464,7 @@ const Settings: React.FC = () => {
             <label className="block text-sm font-medium text-gray-700 mb-2">SMTP Password</label>
             <input 
               type="password" 
-              className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 focus:ring-2 focus:ring-church-500"
+              className="w-full p-3 rounded-xl border border-gray-400 bg-gray-50 focus:ring-2 focus:ring-church-500"
               value={settings?.smtpPassword || ''}
               onChange={(e) => updateSettings({ smtpPassword: e.target.value })}
               placeholder="••••••••"
@@ -474,7 +474,7 @@ const Settings: React.FC = () => {
             <label className="block text-sm font-medium text-gray-700 mb-2">From Email Address</label>
             <input 
               type="email" 
-              className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 focus:ring-2 focus:ring-church-500"
+              className="w-full p-3 rounded-xl border border-gray-400 bg-gray-50 focus:ring-2 focus:ring-church-500"
               value={settings?.smtpFrom || ''}
               onChange={(e) => updateSettings({ smtpFrom: e.target.value })}
               placeholder="noreply@church.com"
@@ -488,7 +488,7 @@ const Settings: React.FC = () => {
             <label className="block text-sm font-medium text-gray-700 mb-2">Accounting Report Recipients</label>
             <input 
               type="text" 
-              className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 focus:ring-2 focus:ring-church-500"
+              className="w-full p-3 rounded-xl border border-gray-400 bg-gray-50 focus:ring-2 focus:ring-church-500"
               value={settings?.accountingRecipients || ''}
               onChange={(e) => updateSettings({ accountingRecipients: e.target.value })}
               placeholder="treasurer@church.com, pastor@church.com"
@@ -498,7 +498,7 @@ const Settings: React.FC = () => {
             <label className="block text-sm font-medium text-gray-700 mb-2">Envelope Report Recipients</label>
             <input 
               type="text" 
-              className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 focus:ring-2 focus:ring-church-500"
+              className="w-full p-3 rounded-xl border border-gray-400 bg-gray-50 focus:ring-2 focus:ring-church-500"
               value={settings?.envelopeRecipients || ''}
               onChange={(e) => updateSettings({ envelopeRecipients: e.target.value })}
               placeholder="envelopesteward@church.com"
@@ -508,7 +508,7 @@ const Settings: React.FC = () => {
             <label className="block text-sm font-medium text-gray-700 mb-2">Bank Deposit Slip Recipients</label>
             <input 
               type="text" 
-              className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 focus:ring-2 focus:ring-church-500"
+              className="w-full p-3 rounded-xl border border-gray-400 bg-gray-50 focus:ring-2 focus:ring-church-500"
               value={settings?.depositRecipients || ''}
               onChange={(e) => updateSettings({ depositRecipients: e.target.value })}
               placeholder="treasurer@church.com"
@@ -528,7 +528,7 @@ const Settings: React.FC = () => {
             <input 
               type="text" 
               placeholder="Add new fund name..."
-              className="flex-1 p-3 rounded-xl border border-gray-200 bg-gray-50 focus:ring-2 focus:ring-church-500"
+              className="flex-1 p-3 rounded-xl border border-gray-400 bg-gray-50 focus:ring-2 focus:ring-church-500"
               value={newFundName}
               onChange={(e) => setNewFundName(e.target.value)}
             />
@@ -572,7 +572,7 @@ const Settings: React.FC = () => {
             <input 
               type="text" 
               placeholder="Add new internal account..."
-              className="flex-1 p-3 rounded-xl border border-gray-200 bg-gray-50 focus:ring-2 focus:ring-church-500"
+              className="flex-1 p-3 rounded-xl border border-gray-400 bg-gray-50 focus:ring-2 focus:ring-church-500"
               value={newInternalAccountName}
               onChange={(e) => setNewInternalAccountName(e.target.value)}
             />
@@ -616,7 +616,7 @@ const Settings: React.FC = () => {
             <p className="text-sm text-gray-500 mb-4">Download the full list of givers as a CSV file for editing in Excel or Google Sheets.</p>
             <button 
               onClick={handleExportGivers}
-              className="w-full bg-white border border-gray-300 text-gray-700 font-bold py-3 rounded-xl hover:bg-gray-100 transition-colors flex justify-center gap-2 items-center"
+              className="w-full bg-white border border-gray-500 text-gray-700 font-bold py-3 rounded-xl hover:bg-gray-100 transition-colors flex justify-center gap-2 items-center"
             >
               <Download className="w-5 h-5" /> Export CSV
             </button>

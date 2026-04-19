@@ -56,7 +56,7 @@ const LockScreen: React.FC<Props> = ({ onUnlock }) => {
               type="password" 
               value={password}
               onChange={(e) => { setPassword(e.target.value); setError(false); }}
-              className={`w-full pl-12 pr-4 py-3 rounded-xl border ${error ? 'border-red-500 bg-red-50' : 'border-gray-200 bg-gray-50'} focus:ring-2 focus:ring-church-500 outline-none transition-all`}
+              className={`w-full pl-12 pr-4 py-3 rounded-xl border ${error ? 'border-red-500 bg-red-50' : 'border-gray-400 bg-gray-50'} focus:ring-2 focus:ring-church-500 outline-none transition-all`}
               placeholder="Vault Password"
               autoFocus
             />
