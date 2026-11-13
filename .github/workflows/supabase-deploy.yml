@@ -37,7 +37,7 @@ jobs:
       - uses: supabase/setup-cli@v1
         if: steps.token.outputs.present == 'true'
         with:
-          version: latest
+          version: 3.1.0   # pinned: CLI flags changed in v3; bump deliberately
 
       - name: Deploy functions
         if: steps.token.outputs.present == 'true'
@@ -46,7 +46,7 @@ jobs:
         run: |
           for fn in $(ls -d supabase/functions/*/ | xargs -n1 basename | grep -v '^_'); do
             echo "Deploying $fn"
-            supabase functions deploy "$fn" --remote "$PROJECT_REF" --use-api --yes
+            supabase functions deploy "$fn" --remote="$PROJECT_REF" --use-api --yes
           done
 
       - name: Smoke test (functions respond, reject anonymous calls)
