@@ -476,43 +476,40 @@ export async function unlockBatch(batchId: string, reason: string): Promise<void
 }
 
 // ---------------------------------------------------------------------------
-// Members (create/invite/remove go through the server: they need the admin API)
+// Members: handled by the `members` Edge Function (it needs the Auth admin API)
 // ---------------------------------------------------------------------------
-async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const { data } = await supabase.auth.getSession();
-  const res = await fetch(path, {
-    ...init,
-    headers: {
-      ...(init.body && !(init.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}),
-      ...(init.headers ?? {}),
-      Authorization: `Bearer ${data.session?.access_token ?? ''}`,
-    },
-  });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
-  return body as T;
+async function fn<T>(name: string, body: Record<string, unknown>): Promise<T> {
+  const { data, error } = await supabase.functions.invoke(name, { body });
+  if (error) {
+    // Surface the function's own error message when there is one
+    const ctx: any = (error as any).context;
+    const msg = ctx?.json ? (await ctx.json().catch(() => null))?.error : undefined;
+    throw new Error(msg || error.message);
+  }
+  return data as T;
 }
-export { api as authedFetch };
+export { fn as invokeFunction };
 
 export async function listMembers(): Promise<User[]> {
-  const { members } = await api<{ members: any[] }>(`/api/churches/${churchId()}/members`);
+  const { members } = await fn<{ members: any[] }>('members', { action: 'list', church_id: churchId() });
   return members.map(m => ({ id: m.user_id, email: m.email, name: m.display_name, role: roleFromDb[m.role as MemberRole], isActive: m.is_active }));
 }
 
 export async function addMember(m: { email: string; name: string; role: UserRole; password: string }): Promise<void> {
-  await write(() => api(`/api/churches/${churchId()}/members`, {
-    method: 'POST', body: JSON.stringify({ email: m.email, display_name: m.name, role: roleToDb(m.role), password: m.password }),
+  await write(() => fn('members', {
+    action: 'create', church_id: churchId(), email: m.email, display_name: m.name, role: roleToDb(m.role), password: m.password,
   }));
 }
 
 export async function updateMember(userId: string, u: { name?: string; role?: UserRole; password?: string }): Promise<void> {
-  await write(() => api(`/api/churches/${churchId()}/members/${userId}`, {
-    method: 'PATCH', body: JSON.stringify({ display_name: u.name, role: u.role ? roleToDb(u.role) : undefined, password: u.password || undefined }),
+  await write(() => fn('members', {
+    action: 'update', church_id: churchId(), user_id: userId,
+    display_name: u.name, role: u.role ? roleToDb(u.role) : undefined, password: u.password || undefined,
   }));
 }
 
 export async function removeMember(userId: string): Promise<void> {
-  await write(() => api(`/api/churches/${churchId()}/members/${userId}`, { method: 'DELETE' }));
+  await write(() => fn('members', { action: 'remove', church_id: churchId(), user_id: userId }));
 }
 
 // ---------------------------------------------------------------------------

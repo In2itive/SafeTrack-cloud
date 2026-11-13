@@ -36,7 +36,15 @@ not by the app, so a bug or a tampered browser can't cross churches.
 `finalize_batch(batch_id, cash_counts, cheque_count, cheque_total)` ·
 `unlock_batch(batch_id, reason)` · `set_smtp_settings(...)` · `get_smtp_settings(church_id)`
 
+`save_batch(church_id, batch, donations, deleted_ids, new_giver_ids)` (atomic, security-invoker) ·
+`import_legacy_backup(church_id, data)` (admin, empty church only) ·
+`get_smtp_for_server(church_id)` (service role only)
+
+## Server pieces
+- `supabase/functions/members`: list/create/update/remove members (Auth admin API)
+- `supabase/functions/insight`: AI one-liner; `GEMINI_API_KEY` is a function secret
+- `server.ts`: emails report PDFs. Stays on Node because Edge Functions block SMTP ports 25/587
+
 ## Not built yet
-- Inviting members (needs a server-side function using the Supabase admin API)
 - Logos → Supabase Storage (currently data URLs in `church_settings`)
-- Import of an existing SafeTrack JSON backup
+- Invite-by-email links (admins currently set a temporary password)

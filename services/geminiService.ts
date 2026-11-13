@@ -1,4 +1,4 @@
-import { authedFetch } from './repo';
+import { invokeFunction } from './repo';
 
 /**
  * One-line treasurer insight. The Gemini key lives only on the server; the
@@ -10,10 +10,7 @@ export const generateFinancialInsight = async (
   donationCount: number
 ): Promise<string> => {
   try {
-    const { insight } = await authedFetch<{ insight: string }>('/api/insight', {
-      method: 'POST',
-      body: JSON.stringify({ totalValue, totalBatches, donationCount }),
-    });
+    const { insight } = await invokeFunction<{ insight: string }>('insight', { totalValue, totalBatches, donationCount });
     return insight;
   } catch {
     return 'AI Assistant offline.';

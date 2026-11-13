@@ -1,20 +1,29 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# SafeTrack Cloud
 
-# Run and deploy your AI Studio app
+Church donation counting with dual-teller controls, blind audit, and standard reports.
+Multi-church, backed by Supabase (Postgres + Auth, Canada region). See `docs/SCHEMA.md`.
 
-This contains everything you need to run your app locally.
+## Run locally
 
-View your app in AI Studio: https://ai.studio/apps/de22fd7e-eaa9-435e-89a5-0a5b7b6f185a
+```bash
+npm install
+cp .env.example .env        # URL + publishable key are already filled in for the dev project
+npm run dev                 # http://localhost:3000
+```
 
-## Run Locally
+First run: click **Set up your church**, create the admin login, confirm the email Supabase sends,
+then sign in and name the church. Add tellers under **User Management**.
 
-**Prerequisites:**  Node.js
+Optional: put the project's secret key in `.env` as `SUPABASE_SECRET_KEY` to enable emailing reports.
 
+## Tests
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+```bash
+supabase/tests/run_local.sh   # needs a local Postgres (PGHOST/PGPORT/PGUSER); also runs in CI
+npm run typecheck
+```
+
+## Moving an existing church in
+
+Admin / Backup → **Import from SafeTrack (offline version)** → choose the `.json` file from
+*Generate Backup* in the old app. Finalized batches stay finalized with their original tellers.
