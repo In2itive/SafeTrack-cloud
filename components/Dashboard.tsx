@@ -36,7 +36,7 @@ const Dashboard: React.FC = () => {
   })) || [];
 
   return (
-    <div className="space-y-8 animate-fade-in">
+    <div className="space-y-4 animate-fade-in">
       <header>
         <h2 className="text-3xl font-bold text-gray-800">Vault Overview</h2>
         <p className="text-gray-500">Welcome back, Treasurer.</p>
@@ -92,7 +92,7 @@ const Dashboard: React.FC = () => {
       </div>
 
       {/* Recent Activity & Chart */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="bg-white p-6 rounded-3xl shadow-xl border border-gray-100">
           <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
             <TrendingUp className="w-5 h-5 text-church-500" />

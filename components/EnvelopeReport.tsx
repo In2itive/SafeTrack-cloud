@@ -97,7 +97,8 @@ const EnvelopeReport = forwardRef<ReportRef, EnvelopeReportProps>(({ batchIdProp
 
     try {
       const pdfBlob = await html2pdf().set(opt).from(element).output('blob');
-      const safeFilename = `Batch_${batch.id}_Envelopes.pdf`;
+      const timestamp = new Date().getTime();
+      const safeFilename = `Batch_${batch.id}_Envelopes_${timestamp}.pdf`;
       
       await sendEmailWithPDF(pdfBlob, safeFilename, 'envelope');
       if (!hiddenMode) alert('Email sent successfully!');
@@ -211,7 +212,7 @@ const EnvelopeReport = forwardRef<ReportRef, EnvelopeReportProps>(({ batchIdProp
       )}
 
       {/* Report Paper */}
-      <div ref={reportRef} className="max-w-4xl mx-auto bg-white p-12 rounded-3xl shadow-xl print:shadow-none print:p-8 print:max-w-none">
+      <div ref={reportRef} className="max-w-4xl mx-auto bg-white p-6 rounded-3xl shadow-xl print:shadow-none print:p-0 print:max-w-none">
         
         {/* Header */}
         <div className="border-b-2 border-gray-800 pb-6 mb-8 print:pb-4 print:mb-6">
@@ -242,11 +243,17 @@ const EnvelopeReport = forwardRef<ReportRef, EnvelopeReportProps>(({ batchIdProp
             
             return (
               <div key={group.giver.id} className="break-inside-avoid">
-                <div className="flex justify-between items-center bg-gray-50 p-2 rounded-t-lg border-b border-gray-200 print:bg-gray-100 print:py-1">
-                  <h3 className="font-bold text-gray-800">
-                    <span className="inline-block w-16 bg-white border border-gray-300 rounded px-2 py-0.5 text-center text-sm mr-3">#{group.giver.envelopeNumber}</span>
-                    {group.giver.name} {group.giver.name2 ? `& ${group.giver.name2}` : ''}
-                  </h3>
+                <div className="flex justify-between items-start bg-gray-50 p-2 rounded-t-lg border-b border-gray-200 print:bg-gray-100 print:py-1">
+                  <div>
+                    <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                      <span className="inline-block w-16 bg-white border border-gray-300 rounded px-2 py-0.5 text-center text-sm">#{group.giver.envelopeNumber}</span>
+                      {group.giver.name} {group.giver.name2 ? `& ${group.giver.name2}` : ''}
+                      {group.giver.isNew && <span className="text-[10px] bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded uppercase font-bold">New</span>}
+                    </h3>
+                    {group.giver.isNew && group.giver.address && (
+                      <p className="text-xs text-gray-600 mt-1 ml-[5.5rem]">{group.giver.address}</p>
+                    )}
+                  </div>
                   <span className="font-bold text-gray-900">${groupTotal.toFixed(2)}</span>
                 </div>
                 

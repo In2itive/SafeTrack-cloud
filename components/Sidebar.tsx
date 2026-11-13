@@ -1,11 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, FilePlus, ClipboardList, Settings, LogOut, ShieldCheck, UserCog } from 'lucide-react';
+import { LayoutDashboard, Users, FilePlus, ClipboardList, Settings, LogOut, ShieldCheck, UserCog, KeyRound } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { UserRole } from '../types';
+import ChangePasswordModal from './ChangePasswordModal';
 
 const Sidebar: React.FC = () => {
   const { logout, user, secondaryUser } = useAuth();
+  const [showChangePassword, setShowChangePassword] = useState(false);
 
   const navClass = ({ isActive }: { isActive: boolean }) =>
     `flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
@@ -67,6 +69,13 @@ const Sidebar: React.FC = () => {
           )}
         </div>
         <button 
+          onClick={() => setShowChangePassword(true)}
+          className="w-full flex items-center justify-center gap-2 mb-3 px-4 py-2 text-xs font-bold rounded-xl text-blue-100 hover:bg-church-800 transition-colors"
+        >
+          <KeyRound className="w-3 h-3" />
+          Change Passwords
+        </button>
+        <button 
           onClick={logout}
           className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-blue-200 hover:bg-red-900/50 hover:text-red-200 transition-colors"
         >
@@ -74,6 +83,10 @@ const Sidebar: React.FC = () => {
           Lock Vault
         </button>
       </div>
+
+      {showChangePassword && (
+        <ChangePasswordModal onClose={() => setShowChangePassword(false)} />
+      )}
     </div>
   );
 };

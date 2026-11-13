@@ -34,7 +34,7 @@ const Login = () => {
 
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl shadow-xl p-8 w-full max-w-sm border border-gray-100">
+      <div className="bg-white rounded-3xl shadow-xl p-6 w-full max-w-sm border border-gray-100">
         <div className="text-center mb-8">
           <div className="w-16 h-16 bg-church-900 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg transform -rotate-3">
             {isSecondaryLogin ? <Users className="w-8 h-8 text-white" /> : <Lock className="w-8 h-8 text-white" />}
@@ -60,7 +60,7 @@ const Login = () => {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
           <div>
             <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">
               {isSecondaryLogin ? 'Second Teller Username' : 'Username'}
@@ -70,6 +70,7 @@ const Login = () => {
               <input
                 type="text"
                 required
+                autoComplete="off"
                 className="w-full pl-10 p-3 rounded-xl border border-gray-400 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-church-500 outline-none transition-all"
                 placeholder={isSecondaryLogin ? "Enter second username" : "Enter your username"}
                 value={formData.username}
@@ -85,6 +86,7 @@ const Login = () => {
               <input
                 type="password"
                 required
+                autoComplete="new-password"
                 className="w-full pl-10 p-3 rounded-xl border border-gray-400 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-church-500 outline-none transition-all"
                 placeholder="••••••••"
                 value={formData.password}

@@ -112,13 +112,13 @@ const GiverInput: React.FC<{
         <input
           type="text"
           readOnly
-          className="w-full pl-9 pr-10 py-2 rounded-lg border border-green-400 bg-green-50 text-green-900 outline-none text-sm font-bold cursor-default"
+          className="w-full pl-9 pr-10 py-1.5 rounded-lg border border-green-400 bg-green-50 text-green-900 outline-none text-base font-bold cursor-default"
           value={value}
         />
         <button
           type="button"
           onClick={onClear}
-          className="absolute right-2 top-1.5 p-1 text-gray-400 hover:text-red-500 rounded-full hover:bg-red-50 transition-colors"
+          className="absolute right-2 top-1 p-1 text-gray-400 hover:text-red-500 rounded-full hover:bg-red-50 transition-colors"
           title="Clear Selection"
         >
           <X className="w-4 h-4" />
@@ -130,11 +130,11 @@ const GiverInput: React.FC<{
   return (
     <div className="relative w-full">
       <div className="relative">
-        <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+        <Search className="absolute left-3 top-2 w-4 h-4 text-gray-400" />
         <input
           ref={inputRef}
           type="text"
-          className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-400 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-church-500 outline-none text-sm font-medium"
+          className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-gray-400 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-church-500 outline-none text-base font-medium"
           placeholder="Env #, Name, or ID"
           value={value}
           onChange={(e) => {
@@ -225,7 +225,7 @@ const InternalAccountInput: React.FC<{
       <input
         ref={inputRef}
         type="text"
-        className="w-full p-2 rounded-xl border border-gray-400 bg-white text-sm font-bold text-gray-800 focus:ring-2 focus:ring-church-500 outline-none uppercase transition-all placeholder:font-normal placeholder:text-gray-400 placeholder:normal-case"
+        className="w-full p-1.5 rounded-lg border border-gray-400 bg-white text-base font-bold text-gray-800 focus:ring-2 focus:ring-church-500 outline-none uppercase transition-all placeholder:font-normal placeholder:text-gray-400 placeholder:normal-case"
         placeholder="Enter account code"
         value={value}
         onChange={(e) => {
@@ -280,7 +280,6 @@ const BatchEntry: React.FC = () => {
     }
   ]);
   
-  const [deletedRowIds, setDeletedRowIds] = useState<number[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
   // Modals
@@ -387,10 +386,18 @@ const BatchEntry: React.FC = () => {
     }
   };
 
-  const removeRow = (id: number) => {
+  const removeRow = async (id: number) => {
     const row = rows.find(r => r.id === id);
     if (row && row.donationId) {
-      setDeletedRowIds(prev => [...prev, row.donationId!]);
+      await db.donations.delete(row.donationId);
+      if (editBatchId) {
+         const remainingDonations = await db.donations.where('batchId').equals(parseInt(editBatchId)).toArray();
+         const newTotal = remainingDonations.reduce((sum, d) => sum + d.amount, 0);
+         await db.batches.update(parseInt(editBatchId), {
+           totalAmount: newTotal,
+           itemCount: remainingDonations.length
+         });
+      }
     }
 
     if (rows.length > 1 || rows.length === 1 && editBatchId) {
@@ -527,10 +534,6 @@ const BatchEntry: React.FC = () => {
              newGiverIds: newGiverIds
            });
 
-           if (deletedRowIds.length > 0) {
-             await db.donations.bulkDelete(deletedRowIds);
-           }
-
            for (const row of rows) {
              const isEmpty = !row.giverId && row.giverId !== 0 && row.giverId !== -1 && !parseFloat(row.amount);
              if (isEmpty) continue;
@@ -590,7 +593,6 @@ const BatchEntry: React.FC = () => {
       if (Object.keys(newDonationIds).length > 0) {
          setRows(prev => prev.map(r => newDonationIds[r.id] ? { ...r, donationId: newDonationIds[r.id] } : r));
       }
-      setDeletedRowIds([]);
 
       if (navigateAway) {
         navigate('/history');
@@ -628,9 +630,9 @@ const BatchEntry: React.FC = () => {
   if (!isLoaded) return <div className="p-8 text-center text-gray-500">Loading batch data...</div>;
 
   return (
-    <div className="space-y-6 h-full flex flex-col relative">
-      {/* Header */}
-      <div className="flex justify-between items-center">
+    <div className="absolute inset-0 flex flex-col -mx-4 px-4 overflow-hidden">
+      {/* Sticky Header */}
+      <div className="flex justify-between items-center sticky top-0 z-40 bg-gray-100 py-3 shrink-0 mb-4 border-b border-gray-200">
         <div>
            {editBatchId ? (
              <div className="flex items-center gap-2">
@@ -646,7 +648,7 @@ const BatchEntry: React.FC = () => {
                       </span>
                     )}
                   </div>
-                  <p className="text-gray-500">Modify donations, add records, or delete rows.</p>
+                  <p className="text-gray-500 text-sm">Modify donations, add records, or delete rows.</p>
                 </div>
              </div>
            ) : (
@@ -657,18 +659,29 @@ const BatchEntry: React.FC = () => {
                     <Users className="w-3 h-3" /> {BatchSource.InPerson}
                  </span>
                </div>
-               <p className="text-gray-500">Rapidly process donations with inline tools.</p>
+               <p className="text-gray-500 text-sm">Rapidly process donations with inline tools.</p>
              </div>
            )}
         </div>
-        <div className="bg-church-900 text-white px-6 py-2 rounded-xl text-right shadow-lg">
-          <p className="text-xs uppercase opacity-70">Batch Total</p>
-          <p className="text-2xl font-bold">${calculateTotal().toFixed(2)}</p>
+        
+        <div className="flex items-center gap-4">
+          <div className="bg-white/80 p-1 flex items-center rounded-xl border border-gray-200 text-right shadow-sm px-4 py-2">
+            <div>
+              <p className="text-xs uppercase font-bold text-gray-400">Batch Total</p>
+              <p className="text-2xl font-bold text-church-900">${calculateTotal().toFixed(2)}</p>
+            </div>
+          </div>
+          <button 
+            onClick={() => handleSave(true)}
+            className="bg-church-gold hover:bg-yellow-400 text-church-900 px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-transform active:scale-95 shadow-md"
+          >
+            <Save className="w-5 h-5" /> {editBatchId ? 'Update & Exit' : 'Save & Exit'}
+          </button>
         </div>
       </div>
 
       {/* Grid Container */}
-      <div className="bg-white p-4 rounded-3xl shadow-xl flex-1 flex flex-col overflow-hidden border border-gray-100">
+      <div className="bg-white p-4 rounded-3xl shadow-xl flex-1 flex flex-col overflow-hidden border border-gray-100 mb-4 min-h-0">
         <div className="flex gap-4 mb-4 items-center border-b border-gray-100 pb-4">
           <label className="font-bold text-gray-700">Batch Date:</label>
           <input 
@@ -679,15 +692,15 @@ const BatchEntry: React.FC = () => {
           />
         </div>
 
-        <div className="flex-1 overflow-visible overflow-y-auto min-h-[300px] pb-4">
+        <div className="flex-1 overflow-visible overflow-y-auto min-h-0 pb-4">
           <table className="w-full text-left border-collapse">
             <thead className="bg-gray-50 sticky top-0 z-40 text-gray-600">
               <tr>
-                <th className="p-3 text-sm font-bold rounded-tl-xl w-1/3">Giver Lookup</th>
-                <th className="p-3 text-sm font-bold w-32">Amount</th>
-                <th className="p-3 text-sm font-bold w-48">Method</th>
-                <th className="p-3 text-sm font-bold">Allocations</th>
-                <th className="p-3 text-sm font-bold rounded-tr-xl w-16"></th>
+                <th className="py-2 px-2 text-base font-bold rounded-tl-xl w-1/3">Giver Lookup</th>
+                <th className="py-2 px-2 text-base font-bold w-32">Amount</th>
+                <th className="py-2 px-2 text-base font-bold w-48">Method</th>
+                <th className="py-2 px-2 text-base font-bold">Allocations</th>
+                <th className="py-2 px-2 text-base font-bold rounded-tr-xl w-16"></th>
               </tr>
             </thead>
             <tbody>
@@ -699,7 +712,7 @@ const BatchEntry: React.FC = () => {
                 return (
                   <tr key={row.id} className="border-b border-gray-50 last:border-0 hover:bg-blue-50/30 transition-colors group align-top">
                     {/* Giver Search Column */}
-                    <td className="p-2 relative z-10">
+                    <td className="p-1 relative z-10">
                       <GiverInput 
                         rowId={row.id}
                         value={row.inputValue}
@@ -714,14 +727,14 @@ const BatchEntry: React.FC = () => {
                     </td>
                     
                     {/* Amount Column */}
-                    <td className="p-2">
+                    <td className="p-1">
                       <div className="relative">
-                        <span className="absolute left-3 top-2 text-gray-400 font-bold">$</span>
+                        <span className="absolute left-3 top-1.5 text-gray-400 font-bold">$</span>
                         <input 
                           id={`amount-${row.id}`}
                           type="number"
                           step="0.01"
-                          className={`w-full pl-6 p-2 rounded-lg border text-sm font-bold outline-none focus:ring-2 focus:ring-church-500 ${isUnbalanced ? 'border-red-300 bg-red-50 text-red-600' : 'border-gray-400 bg-gray-50 text-gray-800'}`}
+                          className={`w-full pl-6 p-1.5 rounded-lg border text-base font-bold outline-none focus:ring-2 focus:ring-church-500 ${isUnbalanced ? 'border-red-300 bg-red-50 text-red-600' : 'border-gray-400 bg-gray-50 text-gray-800'}`}
                           value={row.amount}
                           onChange={(e) => updateRow(row.id, { amount: e.target.value })}
                           placeholder="0.00"
@@ -730,10 +743,10 @@ const BatchEntry: React.FC = () => {
                     </td>
 
                     {/* Method Column */}
-                    <td className="p-2">
+                    <td className="p-1">
                        <div className="flex gap-2">
                         <select 
-                          className={`p-2 rounded-lg border border-gray-400 bg-gray-50 text-sm outline-none focus:ring-2 focus:ring-church-500 transition-all ${row.method === PaymentMethod.Cheque ? 'w-1/2' : 'flex-1'}`}
+                          className={`p-1.5 rounded-lg border border-gray-400 bg-gray-50 text-base outline-none focus:ring-2 focus:ring-church-500 transition-all ${row.method === PaymentMethod.Cheque ? 'w-1/2' : 'flex-1'}`}
                           value={row.method}
                           onChange={(e) => updateRow(row.id, { method: e.target.value as PaymentMethod })}
                         >
@@ -745,7 +758,7 @@ const BatchEntry: React.FC = () => {
                           <input 
                             type="text" 
                             placeholder="Chq #" 
-                            className="w-1/2 p-2 rounded-lg border border-gray-400 bg-gray-50 text-sm outline-none focus:ring-2 focus:ring-church-500"
+                            className="w-1/2 p-1.5 rounded-lg border border-gray-400 bg-gray-50 text-base outline-none focus:ring-2 focus:ring-church-500"
                             value={row.chequeNumber}
                             onChange={(e) => updateRow(row.id, { chequeNumber: e.target.value })}
                           />
@@ -755,7 +768,7 @@ const BatchEntry: React.FC = () => {
                         {row.method === PaymentMethod.Cash && (
                           <button 
                             onClick={() => setCashRowId(row.id)}
-                            className={`p-2 rounded-lg transition-colors border ${cashMismatch ? 'bg-red-100 text-red-500 border-red-400' : 'bg-gray-100 text-gray-400 hover:bg-church-100 hover:text-church-500 border-gray-400'}`}
+                            className={`p-1.5 px-2 rounded-lg transition-colors border ${cashMismatch ? 'bg-red-100 text-red-500 border-red-400' : 'bg-gray-100 text-gray-400 hover:bg-church-100 hover:text-church-500 border-gray-400'}`}
                             title="Cash Denominations"
                             tabIndex={-1}
                           >
@@ -766,11 +779,11 @@ const BatchEntry: React.FC = () => {
                     </td>
 
                     {/* Allocations (Split) Column */}
-                    <td className="p-2">
+                    <td className="p-1">
                       <button 
                         onClick={() => setSplitRowId(row.id)}
                         onKeyDown={(e) => handleKeyDown(e, index)}
-                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium border transition-all flex items-center justify-between outline-none focus:ring-2 focus:ring-church-500 ${
+                        className={`w-full text-left px-2 py-1.5 rounded-lg text-base font-medium border transition-all flex items-center justify-between outline-none focus:ring-2 focus:ring-church-500 ${
                           isUnbalanced 
                             ? 'bg-red-50 border-red-400 text-red-700' 
                             : 'bg-white border-gray-400 text-gray-600 hover:border-church-500'
@@ -791,10 +804,10 @@ const BatchEntry: React.FC = () => {
                     </td>
 
                     {/* Delete Action */}
-                    <td className="p-2 text-center">
+                    <td className="p-1 text-center">
                       <button 
                         onClick={() => removeRow(row.id)}
-                        className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                        className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                         tabIndex={-1}
                         title="Delete Donation"
                       >
@@ -817,15 +830,6 @@ const BatchEntry: React.FC = () => {
           <div ref={bottomRef} className="h-4" />
         </div>
 
-        {/* Footer Actions */}
-        <div className="p-4 border-t border-gray-100 flex justify-end bg-gray-50 rounded-b-3xl mt-auto z-50 relative">
-          <button 
-            onClick={() => handleSave(true)}
-            className="bg-church-gold hover:bg-yellow-400 text-church-900 px-8 py-3 rounded-xl font-bold shadow-lg flex items-center gap-2 transition-transform active:scale-95"
-          >
-            <Save className="w-5 h-5" /> {editBatchId ? 'Update Batch & Exit' : 'Save Batch & Exit'}
-          </button>
-        </div>
       </div>
 
       {/* --- Modals --- */}
@@ -927,8 +931,8 @@ const QuickAddGiverModal: React.FC<{ name: string, onClose: () => void, onSave: 
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl animate-fade-in-up">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-2">
+      <div className="bg-white rounded-3xl p-4 w-full max-w-sm shadow-2xl animate-fade-in-up">
         <h3 className="text-xl font-bold mb-4 text-gray-800">Quick Register Giver</h3>
         <div className="bg-blue-50 p-4 rounded-xl mb-4 text-center">
           <p className="text-xs font-bold text-church-900 uppercase">New Giver</p>
@@ -1035,11 +1039,11 @@ const SplitModal: React.FC<{ row: Row, internalAccounts: { id?: number, name: st
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
       <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden animate-fade-in-up">
-        <div className="bg-church-900 p-4 flex justify-between items-center text-white">
+        <div className="bg-church-900 p-3 flex justify-between items-center text-white">
           <h3 className="font-bold text-lg flex items-center gap-2"><Layers className="w-5 h-5 text-church-gold" /> Designations</h3>
           <button onClick={onClose}><X className="w-6 h-6" /></button>
         </div>
-        <div className="p-6">
+        <div className="p-4">
           <div className="flex justify-between items-end mb-4 border-b pb-2">
             <div><p className="text-sm text-gray-500">Total Donation</p><p className="text-2xl font-bold text-gray-800">${totalAmount.toFixed(2)}</p></div>
             <div className={`text-right ${isBalanced ? 'text-green-600' : 'text-red-500'}`}>
@@ -1103,8 +1107,8 @@ const CashModal: React.FC<{ row: Row, onClose: () => void, onSave: (c: Record<st
           <h3 className="font-bold text-lg flex items-center gap-2"><Calculator className="w-5 h-5 text-white" /> Cash Counter</h3>
           <button onClick={onClose}><X className="w-6 h-6" /></button>
         </div>
-        <div className="p-6 overflow-y-auto flex-1">
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-6">
+        <div className="p-4 overflow-y-auto flex-1">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
              {DENOMINATIONS.map(denom => (
                <div key={denom} className="bg-gray-50 p-3 rounded-xl border border-gray-100 text-center">
                  <label className="text-xs font-bold text-gray-400 block mb-1">${denom}</label>
@@ -1113,7 +1117,7 @@ const CashModal: React.FC<{ row: Row, onClose: () => void, onSave: (c: Record<st
                </div>
              ))}
           </div>
-          <div className="bg-gray-50 p-6 rounded-2xl flex flex-col md:flex-row justify-between items-center gap-4">
+          <div className="bg-gray-50 p-4 rounded-xl flex flex-col md:flex-row justify-between items-center gap-2">
              <div><p className="text-sm text-gray-500 font-medium">Slip Amount</p><p className="text-2xl font-bold text-gray-800">${target.toFixed(2)}</p></div>
              <div className="hidden md:block text-gray-300 text-4xl font-light">/</div>
              <div className="text-center"><p className="text-sm text-gray-500 font-medium">Cash Counted</p><p className="text-2xl font-bold text-church-900">${total.toFixed(2)}</p></div>

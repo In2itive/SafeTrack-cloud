@@ -39,7 +39,7 @@ const LockScreen: React.FC<Props> = ({ onUnlock }) => {
 
   return (
     <div className="min-h-screen bg-church-900 flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl text-center animate-fade-in-up">
+      <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl text-center animate-fade-in-up">
         <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
           <Shield className="w-10 h-10 text-church-900" />
         </div>
