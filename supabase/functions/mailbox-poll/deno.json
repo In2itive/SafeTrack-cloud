@@ -1,0 +1,7 @@
+{
+  "imports": {
+    "imapflow": "npm:imapflow@2.11.0",
+    "postal-mime": "npm:postal-mime@4.2.1",
+    "@supabase/supabase-js": "npm:@supabase/supabase-js@2"
+  }
+}

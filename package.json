@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit",
     "e2e": "node tests/e2e/admin-flow.mjs && node tests/e2e/tellers-flow.mjs && node tests/e2e/giving-flow.mjs && node tests/e2e/etransfer-flow.mjs",
     "seed:demo": "node --env-file=.env scripts/seed-demo.mjs",
-    "test:unit": "tsx tests/unit/giving.test.ts && tsx tests/unit/etransfer.test.ts"
+    "test:unit": "tsx tests/unit/giving.test.ts && tsx tests/unit/etransfer.test.ts && tsx tests/unit/mailbox.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",
@@ -33,6 +33,8 @@
     "@vitejs/plugin-react": "^5.0.0",
     "autoprefixer": "^10.6.2",
     "cross-env": "^10.1.0",
+    "hoodiecrow-imap": "^3.3.1",
+    "imapflow": "^2.11.0",
     "playwright": "^1.63.0",
     "postcss": "^8.5.32",
     "tailwindcss": "^3.4.19",

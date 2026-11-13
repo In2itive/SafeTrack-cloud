@@ -1,8 +1,10 @@
 /** Data access for online giving. Provider-agnostic. */
 import { supabase } from '../supabase';
-import { notifyChange, requireChurchId } from '../repo';
-import type { ExternalTransactionRow } from '../database.types';
-import type { GiftRecord, PostResult, ProviderId, StagedGift, StageResult } from './types';
+import { invokeFunction, notifyChange, requireChurchId } from '../repo';
+import type { ExternalTransactionRow, InboundMessageRow } from '../database.types';
+import type {
+  GiftRecord, InboxMessage, MailboxSettingsView, PostResult, ProviderId, StagedGift, StageResult,
+} from './types';
 
 function must<T>(res: { data: T; error: { message: string } | null }): T {
   if (res.error) throw new Error(res.error.message);
@@ -17,6 +19,7 @@ const toRow = (g: GiftRecord) => ({
   payer_last_name: g.payerLastName ?? null, payer_name: g.payerName ?? null, payer_email: g.payerEmail ?? null,
   payer_phone: g.payerPhone ?? null, payer_address: g.payerAddress ?? null, fund_key: g.fundKey ?? null,
   fund_name: g.fundName ?? null, memo: g.memo ?? null, deposit_ref: g.depositRef ?? null, raw: g.raw,
+  memo_raw: g.memoRaw ?? null, review_flags: g.flags ?? [],
 });
 
 const fromRow = (r: ExternalTransactionRow): StagedGift => ({
@@ -30,6 +33,8 @@ const fromRow = (r: ExternalTransactionRow): StagedGift => ({
   memo: r.memo ?? undefined, depositRef: r.deposit_ref ?? undefined, raw: (r.raw ?? {}) as Record<string, string>,
   giverId: r.giver_id ?? undefined, fundId: r.fund_id ?? undefined, ignored: r.ignored,
   donationId: r.donation_id ?? undefined, stagedAt: r.staged_at,
+  memoRaw: r.memo_raw ?? undefined, reviewFlags: r.review_flags ?? [], matchFlags: r.match_flags ?? [],
+  inboundMessageId: r.inbound_message_id ?? undefined,
 });
 
 /** Add gifts to the review queue. Safe to repeat: gifts are keyed on provider + external id. */
@@ -118,3 +123,51 @@ export async function getBatchProviderSummary(batchId: string): Promise<BatchPro
 }
 
 const round = (n: number) => Math.round(n * 100) / 100;
+
+// ---------------------------------------------------------------------------
+// Automatic intake (mailbox)
+// ---------------------------------------------------------------------------
+export async function getMailboxSettings(): Promise<MailboxSettingsView | null> {
+  return must(await supabase.rpc('get_mailbox_settings', { p_church_id: requireChurchId() })) as unknown as MailboxSettingsView | null;
+}
+
+/** Save the connection. `secret` is write-only: leave it empty to keep the saved one. */
+export async function saveMailboxSettings(settings: Partial<MailboxSettingsView>, secret?: string): Promise<void> {
+  try {
+    must(await supabase.rpc('set_mailbox_settings', {
+      p_church_id: requireChurchId(), p_settings: settings as never, p_secret: secret || null,
+    }));
+  } finally { notifyChange(); }
+}
+
+export interface MailboxRunResult { ok: boolean; detail?: string; error?: string; summary?: Record<string, unknown> }
+
+/** 'test' connects and counts; 'poll' reads new mail now (the schedule does this every 10 minutes). */
+export async function runMailbox(action: 'test' | 'poll'): Promise<MailboxRunResult> {
+  try { return await invokeFunction<MailboxRunResult>('mailbox-poll', { action, church_id: requireChurchId() }); }
+  finally { if (action === 'poll') notifyChange(); }
+}
+
+/** Re-run automatic matching/posting (e.g. after fixing the Giver Registry). */
+export async function runAutoPost(provider: ProviderId): Promise<{ posted: number; held_for_review: number; batches: Record<string, number> }> {
+  try {
+    return must(await supabase.rpc('auto_post_external', { p_church_id: requireChurchId(), p_provider: provider })) as never;
+  } finally { notifyChange(); }
+}
+
+export async function listInbox(limit = 50): Promise<InboxMessage[]> {
+  const rows = must(await supabase.from('inbound_messages')
+    .select('id, source, received_at, from_address, subject, status, reason, external_transaction_id, created_at')
+    .eq('church_id', requireChurchId()).order('created_at', { ascending: false }).limit(limit)) as Omit<InboundMessageRow, 'raw'>[];
+  return rows.map(r => ({
+    id: r.id, source: r.source, receivedAt: r.received_at ?? undefined, from: r.from_address ?? undefined,
+    subject: r.subject ?? undefined, status: r.status, reason: r.reason ?? undefined,
+    externalTransactionId: r.external_transaction_id ?? undefined, createdAt: r.created_at,
+  }));
+}
+
+/** The original email, exactly as received. */
+export async function getInboundRaw(id: string): Promise<string> {
+  const row = must(await supabase.from('inbound_messages').select('raw').eq('id', id).single()) as { raw: string };
+  return row.raw;
+}

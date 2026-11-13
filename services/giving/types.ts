@@ -44,6 +44,10 @@ export interface GiftRecord {
   fundName?: string;
   memo?: string;
   depositRef?: string;       // provider batch / deposit / payout
+  /** Memo exactly as the provider sent it (before tidying). */
+  memoRaw?: string;
+  /** Review flags (FLAG_TEXT keys). Flagged gifts are never posted automatically. */
+  flags?: string[];
   raw: Record<string, string>;
 }
 
@@ -122,6 +126,30 @@ export interface StagedGift extends GiftRecord {
   ignored: boolean;
   donationId?: string;
   stagedAt: string;
+  /** Problems found in the email/file itself (stored once). */
+  reviewFlags: string[];
+  /** Problems matching it to a giver/fund (recomputed by the automatic matcher). */
+  matchFlags: string[];
+  inboundMessageId?: string;
+}
+
+export interface MailboxSettingsView {
+  kind: 'imap' | 'graph';
+  enabled: boolean;
+  auto_post: boolean;
+  time_zone: string;
+  since_date: string;
+  sender_filter: string | null;
+  imap_host: string | null; imap_port: number | null; imap_tls: boolean; imap_username: string | null; imap_folder: string;
+  graph_tenant_id: string | null; graph_client_id: string | null; graph_mailbox: string | null; graph_folder: string;
+  has_secret: boolean;
+  last_polled_at: string | null; last_success_at: string | null; last_error: string | null;
+  last_result: Record<string, unknown> | null;
+}
+
+export interface InboxMessage {
+  id: string; source: string; receivedAt?: string; from?: string; subject?: string;
+  status: 'staged' | 'duplicate' | 'skipped' | 'error'; reason?: string; externalTransactionId?: string; createdAt: string;
 }
 
 export interface StageResult { inserted: number; updated: number; already_posted: number; refunded_after_post: number }

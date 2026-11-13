@@ -91,11 +91,40 @@ Forwarded emails work too: the parser uses the original Interac date and sender,
 
 **Learning:** posting records the sender's email in the giver's first free e-Transfer ID slot (migration 13), so the next gift from them matches automatically.
 
-**Planned automatic feed:**
-1. The church adds a forwarding rule from the mailbox that receives Interac notifications to a per-church inbound address. Cloudflare Email Routing → Worker, or Postmark/Mailgun inbound, all work.
-2. A webhook Edge Function parses each forwarded email with the same `parseInteracEmail()` (postal-mime runs in Deno).
-3. It verifies the original sender is Interac.
-4. It calls `stage_external_transactions_server(church, 'e_transfer', rows)`. Gifts then wait on the review screen with nothing to upload.
+## Automatic e-Transfer intake (mailbox)
+
+The `mailbox-poll` Edge Function reads the church's giving mailbox every 10 minutes and feeds the same pipeline. It is read-only: IMAP EXAMINE / BODY.PEEK, and Graph Mail.Read.
+
+**Connectors** (`supabase/functions/_shared/mailbox.ts`, same `Connector` interface):
+- **IMAP**, for cPanel or ISP mailboxes, and Gmail with an app password. Uses a UID cursor, with UIDVALIDITY handled.
+- **Microsoft 365** via Microsoft Graph, with app-only access. Uses a received-time cursor. Setup:
+  1. Register an Entra app with **Mail.Read (Application)** permission and grant admin consent.
+  2. Limit it to the giving mailbox: `New-ApplicationAccessPolicy -AppId <client id> -PolicyScopeGroupId giving@church.ca -AccessRight RestrictAccess`.
+  3. Enter the tenant ID, client ID and client secret in SafeTrack.
+
+  Switching from IMAP to Microsoft 365 is a settings change. Already-imported e-Transfers aren't brought in twice, because dedupe is on the Interac reference number.
+
+**Each email** is handled like this:
+1. Stored raw in `inbound_messages`. Skipped notices and errors are kept too, so nothing disappears.
+2. Read with the same `parseInteracEmail()` the upload screen uses (`_shared/interac.ts`). The memo is kept exactly as sent (`memo_raw`).
+3. Staged into `external_transactions`.
+
+**Flags.** Problems in the email itself become **review flags**: not from Interac, DKIM/DMARC failed, no reference, no sender email.
+
+**Auto-post** (`private.auto_post_external`) is stricter than the screen's suggestions:
+- **Giver:** the envelope # from the memo, which must agree with the giver's recorded e-Transfer emails when they have any. Otherwise the remembered sender link, or a unique email match.
+- **Fund:** exactly one fund named in the memo. Otherwise General, but only if the memo says nothing else.
+- **Holding:** anything else gets a **match flag** (`envelope_not_found`, `envelope_email_mismatch`, `needs_giver`, `fund_unclear`) and waits.
+- **Batches:** confident gifts go into an open batch per week ("week ending Sunday", `auto_batch_key`). If that week's batch is already finalized, a late gift opens a new one. Batches still need two-person sign-off.
+
+**In the app:** on the review screen, flagged gifts need a "Reviewed" tick before they can be posted. Each gift links to its original email.
+
+**Security:**
+- The mailbox password or client secret is stored in **Supabase Vault**: write-only from the app, and read only by the function through a service-role RPC.
+- Raw emails are visible to administrators and treasurers only.
+- The scheduler authenticates with a Vault-held secret (`x-poll-secret`). People in the app authenticate with their session, and their role is re-checked.
+
+**Schedule:** run `scripts/sql/schedule-mailbox-poll.sql` once per project (pg_cron + pg_net).
 
 ## Adding the Stripe module (planned)
 

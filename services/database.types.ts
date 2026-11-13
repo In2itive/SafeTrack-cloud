@@ -67,6 +67,12 @@ export interface ExternalTransactionRow {
   fund_key: string | null; fund_name: string | null; memo: string | null; deposit_ref: string | null; raw: Json;
   giver_id: string | null; fund_id: string | null; ignored: boolean; donation_id: string | null;
   posted_at: string | null; staged_by: string | null; staged_at: string; updated_at: string;
+  review_flags: string[]; match_flags: string[]; memo_raw: string | null; inbound_message_id: string | null; auto_posted: boolean;
+}
+export interface InboundMessageRow {
+  id: string; church_id: string; provider: BatchSourceDb; source: string; message_key: string; received_at: string | null;
+  from_address: string | null; subject: string | null; raw: string; status: 'staged' | 'duplicate' | 'skipped' | 'error';
+  reason: string | null; external_transaction_id: string | null; created_at: string;
 }
 export interface GiverExternalIdRow { church_id: string; provider: BatchSourceDb; external_id: string; giver_id: string; updated_at: string }
 export interface ExternalFundMapRow { church_id: string; provider: BatchSourceDb; external_key: string; fund_id: string; updated_at: string }
@@ -90,6 +96,7 @@ export type Database = {
       external_transactions: Table<ExternalTransactionRow>;
       giver_external_ids: Table<GiverExternalIdRow>;
       external_fund_map: Table<ExternalFundMapRow>;
+      inbound_messages: Table<InboundMessageRow>;
     };
     Views: {
       batch_totals: { Row: BatchTotalsRow; Relationships: [] };
@@ -104,6 +111,9 @@ export type Database = {
       set_smtp_settings: { Args: { p_church_id: string; p_host: string; p_port: number; p_username: string; p_password: string | null; p_from_address: string }; Returns: undefined };
       stage_external_transactions: { Args: { p_church_id: string; p_provider: BatchSourceDb; p_rows: Json }; Returns: Json };
       post_external_batch: { Args: { p_church_id: string; p_provider: BatchSourceDb; p_ids: string[]; p_batch_date?: string | null; p_resolutions?: Json }; Returns: Json };
+      set_mailbox_settings: { Args: { p_church_id: string; p_settings: Json; p_secret?: string | null }; Returns: undefined };
+      get_mailbox_settings: { Args: { p_church_id: string }; Returns: Json };
+      auto_post_external: { Args: { p_church_id: string; p_provider: BatchSourceDb }; Returns: Json };
       get_smtp_settings: { Args: { p_church_id: string }; Returns: { host: string; port: number; username: string; from_address: string; has_password: boolean }[] };
     };
     Enums: {

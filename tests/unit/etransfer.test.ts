@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { etransferProvider, envelopeFromMemo, splitPasted } from '../../services/giving/providers/etransfer';
+import { parseInteracEmail } from '../../supabase/functions/_shared/interac';
 import { buildIndexes, suggestFund, suggestGiver, type MatchContext } from '../../services/giving/matching';
 import type { SourceDoc } from '../../services/giving/types';
 
@@ -98,6 +99,25 @@ await test('Matching: e-Transfer ID / envelope / memo fund', async () => {
     ['g100:envelope', 'g101:email', 'g102:name', '-:-']);
   assert.deepEqual(r.gifts.map(g => { const s = suggestFund(g, ctx); return `${s.fundId ?? '-'}:${s.reason ?? '-'}`; }),
     ['f-General:guess', 'f-Missions:memo', 'f-Building:memo', 'f-General:guess']);
+});
+
+await test('raw memo kept exactly; flags; church time zone; DKIM failure', async () => {
+  const { gift } = await one('autodeposit.eml');
+  assert.equal(gift.memoRaw, 'Tithe - env 100');
+  assert.deepEqual(gift.flags, []);
+  const base = { subject: 'INTERAC e-Transfer: AL BO sent you money.', from: 'notify@payments.interac.ca',
+    text: 'AL BO (al@x.com) sent you $5.00 (CAD).\nMessage:   "Missions"  \nReference Number: CATZ00000001',
+    date: 'Sun, 08 Nov 2026 23:30:00 -0500' };
+  const late = parseInteracEmail(base, { timeZone: 'America/Toronto' });
+  assert.ok('gift' in late && late.gift.giftDate === '2026-11-08' && late.gift.memoRaw === '   "Missions"'.trimStart() && late.gift.memo === 'Missions');
+  const utc = parseInteracEmail(base, { timeZone: 'UTC' });
+  assert.ok('gift' in utc && utc.gift.giftDate === '2026-11-09');
+  const spoof = parseInteracEmail({ ...base, from: 'evil@example.com', text: base.text.replace('Reference Number: CATZ00000001', ''),
+    authResults: 'mx.host; dkim=fail header.d=payments.interac.ca; dmarc=fail' });
+  assert.ok('gift' in spoof);
+  if ('gift' in spoof) assert.deepEqual(spoof.gift.flags.sort(), ['auth_failed', 'no_reference', 'not_from_interac']);
+  const noInterac = parseInteracEmail({ ...base, from: 'evil@example.com', subject: 'e-Transfer: AL BO sent you money.' });
+  assert.ok('gift' in noInterac && noInterac.gift.flags.includes('not_from_interac'));
 });
 
 console.log(`\n${passed} e-Transfer tests passed`);
