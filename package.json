@@ -9,7 +9,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "e2e": "node tests/e2e/admin-flow.mjs"
+    "e2e": "node tests/e2e/admin-flow.mjs && node tests/e2e/tellers-flow.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",

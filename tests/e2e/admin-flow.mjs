@@ -6,7 +6,7 @@ import fs from 'fs';
 
 const BASE = process.env.BASE_URL || 'http://localhost:3000/';
 const stamp = Date.now().toString(36);
-const state = fs.existsSync('state.json') ? JSON.parse(fs.readFileSync('state.json', 'utf8')) : {};
+const state = fs.existsSync('tests/e2e/state.json') ? JSON.parse(fs.readFileSync('tests/e2e/state.json', 'utf8')) : {};
 const PASSWORD = 'Test-Password-2026!';
 const log = (...a) => console.log('•', ...a);
 let shot = 0;
@@ -142,7 +142,7 @@ try {
     await expectText(/Admin \/ Adj|Adj:/, 'admin adjustment shown on reports');
   }
 
-  fs.writeFileSync('state.json', JSON.stringify(state, null, 2));
+  fs.writeFileSync('tests/e2e/state.json', JSON.stringify(state, null, 2));
   console.log('\nE2E PASSED', errors.length ? `(page errors: ${errors.join(' | ').slice(0, 400)})` : '(no page errors)');
 } catch (e) {
   await snap('error').catch(() => {});
