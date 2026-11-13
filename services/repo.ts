@@ -361,7 +361,41 @@ export async function listDonations(batchId: string): Promise<Donation[]> {
   return (must(rows) as any[]).map(r => donationFromRow(r, date));
 }
 
-/** Every donation for the church (dashboard). */
+export interface YearSummary { year: number; total: number; count: number; batches: number; byMonth: number[] }
+
+/** Year-to-date totals, computed by the database (batch-date year). */
+export async function getYearSummary(year: number): Promise<YearSummary> {
+  const r = must(await supabase.rpc('dashboard_summary', { p_church_id: churchId(), p_year: year })) as any;
+  return { year: r.year, total: Number(r.total), count: Number(r.count), batches: Number(r.batches), byMonth: (r.by_month ?? []).map(Number) };
+}
+
+export interface RecentTransaction {
+  transactionNumber: string;
+  amount: number;
+  method: PaymentMethod;
+  giverName: string;
+  envelopeNumber: number;
+  batchNumber: string;
+  batchDate: string;
+  batchId: string;
+}
+
+/** Most recently entered transactions. */
+export async function listRecentTransactions(limit = 8): Promise<RecentTransaction[]> {
+  const rows = must(await supabase.from('donations')
+    .select('transaction_number, amount, payment_method, batch_id, givers(name, envelope_number), batches(batch_number, batch_date)')
+    .eq('church_id', churchId())
+    .order('created_at', { ascending: false })
+    .order('transaction_number', { ascending: false })
+    .limit(limit)) as any[];
+  return rows.map(r => ({
+    transactionNumber: r.transaction_number, amount: Number(r.amount), method: methodFromDb[r.payment_method as PaymentMethodDb],
+    giverName: r.givers?.name ?? 'Unknown', envelopeNumber: r.givers?.envelope_number ?? 0,
+    batchNumber: r.batches?.batch_number ?? '', batchDate: r.batches?.batch_date ?? '', batchId: r.batch_id,
+  }));
+}
+
+/** Every donation for the church (capped by the API at 1000 rows; prefer the functions above). */
 export async function listAllDonations(): Promise<Donation[]> {
   const rows = must(await supabase.from('donations').select(`${DONATION_SELECT}, batches(batch_date)`)
     .eq('church_id', churchId()).limit(10000)) as any[];

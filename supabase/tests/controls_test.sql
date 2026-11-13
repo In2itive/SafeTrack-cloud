@@ -372,5 +372,18 @@ select pg_temp.expect_error(array[format('update public.donations set transactio
 select pg_temp.expect_error(array[format('set local safetrack.allow_locked_changes = ''on''; update public.batches set batch_number = ''20269999'' where id = %L', :'batch')],
   'cannot be changed', 'even an unlock override cannot renumber a batch');
 
+-- ---------- dashboard summary ----------
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
+select pg_temp.expect_eq((select (public.dashboard_summary(:'church_a', 2026) ->> 'total')),
+                         (select sum(d.amount)::text from public.donations d join public.batches b on b.id = d.batch_id
+                          where b.church_id = :'church_a' and extract(year from b.batch_date) = 2026),
+                         'dashboard year total = sum of that year''s donations');
+select pg_temp.expect_eq((select jsonb_array_length(public.dashboard_summary(:'church_a', 2026) -> 'by_month')::text), '12', 'twelve monthly buckets');
+select pg_temp.expect_eq((select public.dashboard_summary(:'church_a', 2025) ->> 'total'), '0', 'empty year totals 0');
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000b1';
+select pg_temp.expect_eq((select public.dashboard_summary(:'church_a', 2026) ->> 'total'), '0', 'another church sees 0 (RLS applies)');
+reset role;
+
 \echo
 \echo ALL TESTS PASSED
