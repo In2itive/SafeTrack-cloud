@@ -198,7 +198,7 @@ const DepositSlip = forwardRef<ReportRef, DepositSlipProps>(({ batchIdProp, hidd
             </div>
             <div className="mt-4 text-sm">
               <p>Date: <span className="font-bold">{formatDate(batch.date)}</span></p>
-              <p>Batch #: <span className="font-bold">{batch.id}</span></p>
+              <p>Batch #: <span className="font-bold">{shortId(batch.id)}</span></p>
             </div>
           </div>
         </div>

@@ -16,6 +16,16 @@ then sign in and name the church. Add tellers under **User Management**.
 
 Optional: put the project's secret key in `.env` as `SUPABASE_SECRET_KEY` to enable emailing reports.
 
+## Demo church
+
+```bash
+node --env-file=.env scripts/seed-demo.mjs
+```
+
+Creates **Grace Community Church (Demo)**: 4 logins (admin, treasurer, two tellers), 20 givers,
+six Sundays of counted batches (one corrected by the admin, one left open to audit).
+Prints the logins when done. Needs "Confirm email" off on the target project.
+
 ## Tests
 
 ```bash
