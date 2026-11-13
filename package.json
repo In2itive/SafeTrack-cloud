@@ -9,9 +9,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "e2e": "node tests/e2e/admin-flow.mjs && node tests/e2e/tellers-flow.mjs && node tests/e2e/giving-flow.mjs",
+    "e2e": "node tests/e2e/admin-flow.mjs && node tests/e2e/tellers-flow.mjs && node tests/e2e/giving-flow.mjs && node tests/e2e/etransfer-flow.mjs",
     "seed:demo": "node --env-file=.env scripts/seed-demo.mjs",
-    "test:unit": "tsx tests/unit/giving.test.ts"
+    "test:unit": "tsx tests/unit/giving.test.ts && tsx tests/unit/etransfer.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",
@@ -21,6 +21,7 @@
     "lucide-react": "^0.562.0",
     "multer": "^2.1.1",
     "nodemailer": "^10.5.0",
+    "postal-mime": "^4.2.1",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "react-router-dom": "^7.11.0",

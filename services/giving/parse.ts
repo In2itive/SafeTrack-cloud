@@ -62,6 +62,7 @@ export function parseAmount(v: string | undefined): number {
   s = s.replace(/[A-Za-z$€£\s]/g, '');
   if (s.startsWith('-')) { neg = !neg; s = s.slice(1); }
   if (/^\d{1,3}(\.\d{3})+,\d{1,2}$/.test(s)) s = s.replace(/\./g, '').replace(',', '.'); // 1.234,56
+  else if (/^\d{1,3}( \d{3})*,\d{2}$/.test(v.trim().replace(/[^\d ,]/g, '').trim())) s = s.replace(',', '.'); // 50,00 / 1 234,56 (fr-CA)
   else s = s.replace(/,/g, '');
   if (!/^\d*\.?\d+$/.test(s)) return NaN;
   const n = Math.round(parseFloat(s) * 100) / 100;

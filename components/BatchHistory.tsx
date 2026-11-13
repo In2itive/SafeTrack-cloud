@@ -3,6 +3,11 @@ import { formatDate } from '../utils/date';
 import { useLive, listBatches, listDonations, getGivers, finalizeBatch, unlockBatch, deleteBatch, signAsSecondTeller, batchLabel } from '../services/repo';
 import { BatchStatus, PaymentMethod, BatchSource, UserRole, isProviderSource } from '../types';
 import { getBatchProviderSummary } from '../services/giving/repo';
+import { PROVIDERS } from '../services/giving/providers';
+
+const PROVIDER_BY_SOURCE: Record<string, string> = { [BatchSource.PushPay]: 'pushpay', [BatchSource.Stripe]: 'stripe', [BatchSource.ETransfer]: 'e_transfer' };
+const reconcileAgainst = (src: BatchSource) =>
+  PROVIDERS.find(p => p.id === PROVIDER_BY_SOURCE[src])?.reconcileAgainst ?? `the ${src} deposit report and the bank statement`;
 import { FileText, Lock, CheckCircle, Banknote, ScrollText, Unlock, AlertTriangle, X, ShieldAlert, Edit, Smartphone, CreditCard, Users, FileSpreadsheet, Trash2, Mail } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -396,7 +401,7 @@ const BatchHistory: React.FC = () => {
                            <CreditCard className="w-5 h-5 text-church-500" /> {activeBatch.source} reconciliation
                          </h4>
                          <p className="text-sm text-gray-500 mb-3">
-                           Second person: check these figures against the {activeBatch.source} deposit report and the bank statement before signing.
+                           Second person: check these figures against {reconcileAgainst(activeBatch.source)} before signing.
                          </p>
                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
                            <div className="bg-white rounded-lg border p-2"><div className="text-xs text-gray-400">Gifts</div><div className="text-lg font-bold">{providerSummary.count}</div></div>

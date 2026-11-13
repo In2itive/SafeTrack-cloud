@@ -51,7 +51,8 @@ export enum BatchSource {
 }
 
 /** Batches built from a giving provider's data rather than counted by tellers. */
-export const isProviderSource = (s?: BatchSource) => s === BatchSource.PushPay || s === BatchSource.Stripe;
+export const isProviderSource = (s?: BatchSource) =>
+  s === BatchSource.PushPay || s === BatchSource.Stripe || s === BatchSource.ETransfer;
 
 export interface Giver {
   id?: string;

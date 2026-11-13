@@ -17,11 +17,25 @@ import {
   listFundMap, listGiverLinks, listQueue, postGifts, setIgnored, stageGifts,
 } from '../services/giving/repo';
 import type {
-  ColumnMapping, CsvTable, DateOrder, FileProvider, ParseResult, ProviderId, StagedGift,
+  ColumnMapping, CsvTable, DateOrder, DocumentProvider, FileProvider, ParseResult, ProviderId, SourceDoc, StagedGift,
 } from '../services/giving/types';
 
 const money = (n: number) => '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const METHOD_LABEL: Record<string, string> = { card: 'Card', bank_debit: 'Bank debit', online: 'Online' };
+const METHOD_LABEL: Record<string, string> = { card: 'Card', bank_debit: 'Bank debit', online: 'Online', e_transfer: 'e-Transfer' };
+
+const addDays = (iso: string, n: number) => {
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(y, m - 1, d + n);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+};
+
+/** Monday of the gift's week, as YYYY-MM-DD. */
+const weekStart = (iso: string) => {
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() - ((dt.getDay() + 6) % 7));
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+};
 
 type Note = { kind: 'ok' | 'warn' | 'error'; text: React.ReactNode } | null;
 
@@ -30,6 +44,7 @@ interface Row extends StagedGift {
   giverReason?: GiverReason | 'chosen';
   candidates?: string[];
   fundIdEff?: string;
+  fundReason?: FundReason | 'chosen';
   ready: boolean;
 }
 
@@ -45,8 +60,7 @@ const ReasonBadge: React.FC<{ reason?: string; weak?: boolean }> = ({ reason, we
 const GivingImport: React.FC = () => {
   const { user } = useAuth();
   const canManage = user?.role === UserRole.Administrator || user?.role === UserRole.Treasurer;
-  const fileProviders = PROVIDERS.filter((p): p is FileProvider => p.kind === 'file');
-  const [providerId, setProviderId] = useState<ProviderId>(PROVIDERS[0].id);
+  const [providerId, setProviderIdRaw] = useState<ProviderId>(PROVIDERS[0].id);
   const provider = PROVIDERS.find(p => p.id === providerId)!;
 
   // ---- upload state ----
@@ -56,11 +70,14 @@ const GivingImport: React.FC = () => {
   const [dateOrder, setDateOrder] = useState<DateOrder>('auto');
   const [showMapping, setShowMapping] = useState(false);
   const [showSkipped, setShowSkipped] = useState(false);
+  const [docParsed, setDocParsed] = useState<ParseResult | null>(null);
+  const [pasteText, setPasteText] = useState('');
 
   // ---- review state ----
   const [giverChoice, setGiverChoice] = useState<Record<string, string>>({});
   const [fundChoice, setFundChoice] = useState<Record<string, string>>({});
-  const [groupBy, setGroupBy] = useState<'auto' | 'date' | 'deposit'>('auto');
+  const [rowFundChoice, setRowFundChoice] = useState<Record<string, string>>({});
+  const [groupBy, setGroupBy] = useState<'auto' | 'date' | 'week' | 'deposit'>('auto');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showIgnored, setShowIgnored] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -72,12 +89,20 @@ const GivingImport: React.FC = () => {
   const giverLinks = useLive(() => listGiverLinks(providerId), [providerId]);
   const fundMap = useLive(() => listFundMap(providerId), [providerId]);
 
-  const fp = provider.kind === 'file' ? provider : null;
+  const fp: FileProvider | null = provider.kind === 'file' ? provider : null;
+  const dp: DocumentProvider | null = provider.kind === 'documents' ? provider : null;
   const missing = fp && table ? fp.missingFields(mapping) : [];
-  const parsed: ParseResult | null = useMemo(() => {
+  const tableParsed: ParseResult | null = useMemo(() => {
     if (!fp || !table || missing.length) return null;
     return fp.parse(table, mapping, { dateOrder });
   }, [fp, table, mapping, dateOrder, missing.length]);
+  const parsed = fp ? tableParsed : docParsed;
+
+  const setProviderId = (id: ProviderId) => {
+    setProviderIdRaw(id);
+    setTable(null); setFileName(''); setMapping({}); setDocParsed(null); setPasteText('');
+    setGiverChoice({}); setFundChoice({}); setRowFundChoice({}); setSelected(new Set()); setGroupBy('auto'); setNote(null);
+  };
 
   // ---- matching ----
   const ctx: MatchContext | null = givers && funds && giverLinks && fundMap
@@ -95,24 +120,26 @@ const GivingImport: React.FC = () => {
       const sf = suggestFund(g, ctx);
       const chosen = giverChoice[g.id];
       const giverIdEff = chosen || g.giverId || sg.giverId;
-      const fundIdEff = fundChoice[fundKeyOf(g)] || g.fundId || sf.fundId;
+      const key = fundKeyOf(g);
+      const fundIdEff = (key ? fundChoice[key] : rowFundChoice[g.id]) || g.fundId || sf.fundId;
       return {
-        ...g, giverIdEff, fundIdEff, candidates: sg.candidates,
+        ...g, giverIdEff, fundIdEff, fundReason: (key ? fundChoice[key] : rowFundChoice[g.id]) ? 'chosen' : sf.reason, candidates: sg.candidates,
         giverReason: chosen ? 'chosen' : g.giverId ? 'remembered' : sg.reason,
         ready: !g.ignored && g.status === 'succeeded' && !!giverIdEff && !!fundIdEff,
       };
     });
-  }, [queue, ctx, giverChoice, fundChoice]);
+  }, [queue, ctx, giverChoice, fundChoice, rowFundChoice]);
 
   const active = rows.filter(r => !r.ignored);
   const ignoredRows = rows.filter(r => r.ignored);
   const hasDeposits = active.some(r => r.depositRef);
-  const by = groupBy === 'auto' ? (hasDeposits ? 'deposit' : 'date') : groupBy;
+  const by = groupBy === 'auto' ? (provider.defaultGrouping ?? (hasDeposits ? 'deposit' : 'date')) : groupBy;
 
   const groups = useMemo(() => {
     const m = new Map<string, Row[]>();
     for (const r of active) {
-      const k = by === 'deposit' && r.depositRef ? `dep:${r.depositRef}` : `date:${r.giftDate}`;
+      const k = by === 'deposit' && r.depositRef ? `dep:${r.depositRef}`
+              : by === 'week' ? `week:${weekStart(r.giftDate)}` : `date:${r.giftDate}`;
       if (!m.has(k)) m.set(k, []);
       m.get(k)!.push(r);
     }
@@ -121,7 +148,8 @@ const GivingImport: React.FC = () => {
       const ready = items.filter(i => i.ready);
       return {
         key, items, ready,
-        label: key.startsWith('dep:') ? `Deposit ${key.slice(4)}` : formatDate(key.slice(5)),
+        label: key.startsWith('dep:') ? `Deposit ${key.slice(4)}`
+             : key.startsWith('week:') ? `Week ending ${formatDate(addDays(key.slice(5), 6))}` : formatDate(key.slice(5)),
         dateRange: dates[0] === dates[dates.length - 1] ? formatDate(dates[0]) : `${formatDate(dates[0])} – ${formatDate(dates[dates.length - 1])}`,
         batchDate: dates[dates.length - 1],
         gross: ready.reduce((s, i) => s + i.amount, 0),
@@ -137,6 +165,7 @@ const GivingImport: React.FC = () => {
     if (!ctx) return [];
     for (const r of active) {
       const key = fundKeyOf(r);
+      if (!key) continue;   // no fund field: chosen per gift in the table
       const label = r.fundName && r.fundKey && r.fundName !== r.fundKey ? `${r.fundName} (${r.fundKey})` : (r.fundName || r.fundKey || 'No fund given');
       const e = m.get(key) ?? { key, label, count: 0, total: 0 };
       e.count++; e.total += r.amount;
@@ -180,7 +209,17 @@ const GivingImport: React.FC = () => {
     }
   };
 
-  const clearUpload = () => { setTable(null); setFileName(''); setMapping({}); };
+  const clearUpload = () => { setTable(null); setFileName(''); setMapping({}); setDocParsed(null); setPasteText(''); };
+
+  const onDocs = (files: File[] | null, pasted?: string) => run(async () => {
+    if (!dp) return;
+    const docs: SourceDoc[] = await Promise.all((files ?? []).map(async f => ({ name: f.name, content: await f.arrayBuffer(), lastModified: f.lastModified })));
+    if (pasted?.trim()) docs.push({ name: 'Pasted text', content: pasted });
+    if (!docs.length) return;
+    setDocParsed(await dp.parseDocuments(docs));
+    setFileName(docs.length === 1 ? docs[0].name : `${docs.length} files`);
+    setShowSkipped(false);
+  });
 
   const stage = () => run(async () => {
     if (!parsed) return;
@@ -201,6 +240,7 @@ const GivingImport: React.FC = () => {
     const r = rs[0];
     const g = await addGiver({
       name: payerLabel(r), email: r.payerEmail, pushPayId: providerId === 'pushpay' ? r.payerExternalId : undefined,
+      eTransferId: providerId === 'e_transfer' ? r.payerEmail : undefined,
       address1: r.payerAddress,
       // Keep the provider's envelope number when it's free and not reserved
       ...(r.payerEnvelope !== undefined && r.payerEnvelope >= 2 && !(givers ?? []).some(x => x.envelopeNumber === r.payerEnvelope)
@@ -248,7 +288,7 @@ const GivingImport: React.FC = () => {
           <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2"><CreditCard className="w-6 h-6 text-church-500" /> Online Giving</h2>
           <p className="text-gray-500 text-sm">Bring online gifts in as batches. They are signed off by two people like any other batch.</p>
         </div>
-        {fileProviders.length > 1 && (
+        {PROVIDERS.length > 1 && (
           <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
             {PROVIDERS.map(p => (
               <button key={p.id} onClick={() => setProviderId(p.id)}
@@ -276,18 +316,34 @@ const GivingImport: React.FC = () => {
       )}
 
       {/* ---------------- Upload ---------------- */}
-      {fp && canManage && (
+      {(fp || dp) && canManage && (
         <section className="bg-white rounded-2xl shadow-md border border-gray-100 p-6">
           <div className="flex flex-col md:flex-row gap-6">
             <div className="md:w-1/3">
-              <h3 className="font-bold text-gray-800 mb-2">1. Upload a {fp.label} export</h3>
+              <h3 className="font-bold text-gray-800 mb-2">1. {dp ? `Upload ${provider.label} emails` : `Upload a ${provider.label} export`}</h3>
               <ul className="text-sm text-gray-600 list-disc ml-5 space-y-1">
-                {fp.exportSteps.map(s => <li key={s}>{s}</li>)}
+                {(fp ?? dp)!.exportSteps.map(s => <li key={s}>{s}</li>)}
               </ul>
-              <p className="text-xs text-gray-400 mt-3">Overlapping date ranges are fine — gifts already brought in are recognised and skipped.</p>
+              {fp && <p className="text-xs text-gray-400 mt-3">Overlapping date ranges are fine — gifts already brought in are recognised and skipped.</p>}
             </div>
             <div className="flex-1">
-              {!table ? (
+              {dp && !docParsed ? (
+                <div className="space-y-3">
+                  <label className="flex flex-col items-center justify-center h-32 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-church-500 hover:bg-church-50 transition-colors">
+                    <Upload className="w-7 h-7 text-gray-400 mb-1" />
+                    <span className="text-sm font-medium text-gray-600">Choose the e-Transfer emails</span>
+                    <span className="text-xs text-gray-400">.eml or .mbox — select as many as you like</span>
+                    <input type="file" multiple accept={dp.accept} className="hidden" data-testid="giving-files"
+                      onChange={e => { const f = e.target.files ? [...e.target.files] : []; e.target.value = ''; onDocs(f); }} />
+                  </label>
+                  <textarea value={pasteText} onChange={e => setPasteText(e.target.value)} rows={4} data-testid="giving-paste"
+                    placeholder={dp.pasteHint} className="w-full border border-gray-300 rounded-xl p-3 text-sm font-mono" />
+                  {pasteText.trim() && (
+                    <button onClick={() => onDocs(null, pasteText)} disabled={busy}
+                      className="px-4 py-2 rounded-lg bg-church-600 text-white text-sm font-semibold disabled:opacity-50">Read pasted emails</button>
+                  )}
+                </div>
+              ) : fp && !table ? (
                 <label className="flex flex-col items-center justify-center h-40 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-church-500 hover:bg-church-50 transition-colors">
                   <Upload className="w-8 h-8 text-gray-400 mb-2" />
                   <span className="text-sm font-medium text-gray-600">Choose the CSV file</span>
@@ -298,16 +354,16 @@ const GivingImport: React.FC = () => {
               ) : (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <div className="text-sm"><span className="font-semibold">{fileName}</span> <span className="text-gray-400">· {table.rows.length} rows</span></div>
+                    <div className="text-sm"><span className="font-semibold">{fileName}</span>{table && <span className="text-gray-400"> · {table.rows.length} rows</span>}</div>
                     <div className="flex items-center gap-3">
-                      <button onClick={() => setShowMapping(s => !s)} className="text-sm text-church-600 flex items-center gap-1">
+                      {fp && <button onClick={() => setShowMapping(s => !s)} className="text-sm text-church-600 flex items-center gap-1">
                         <SlidersHorizontal className="w-4 h-4" /> Columns
-                      </button>
+                      </button>}
                       <button onClick={clearUpload} className="text-sm text-gray-500">Cancel</button>
                     </div>
                   </div>
 
-                  {showMapping && (
+                  {fp && table && showMapping && (
                     <div className="border border-gray-200 rounded-xl p-4 bg-gray-50">
                       <div className="flex items-center justify-between mb-3">
                         <p className="text-xs text-gray-500">Match the file's columns to SafeTrack. Recognised columns are filled in already.</p>
@@ -340,7 +396,7 @@ const GivingImport: React.FC = () => {
                   ) : parsed && (
                     <>
                       <div className="grid grid-cols-3 gap-3 text-center">
-                        <div className="p-3 rounded-xl bg-green-50"><div className="text-2xl font-bold text-green-700">{parsed.gifts.length}</div><div className="text-xs text-green-700">online gifts</div></div>
+                        <div className="p-3 rounded-xl bg-green-50"><div className="text-2xl font-bold text-green-700">{parsed.gifts.length}</div><div className="text-xs text-green-700">{dp ? 'e-Transfers' : 'online gifts'}</div></div>
                         <div className="p-3 rounded-xl bg-gray-50"><div className="text-2xl font-bold text-gray-700">{money(parsed.gifts.reduce((s, g) => s + g.amount, 0))}</div><div className="text-xs text-gray-500">gross</div></div>
                         <button onClick={() => setShowSkipped(s => !s)} className="p-3 rounded-xl bg-amber-50 hover:bg-amber-100">
                           <div className="text-2xl font-bold text-amber-700">{parsed.skipped.length}</div><div className="text-xs text-amber-700">skipped {parsed.skipped.length > 0 && '(show)'}</div>
@@ -351,7 +407,7 @@ const GivingImport: React.FC = () => {
                         <div className="max-h-48 overflow-auto border rounded-lg text-xs">
                           <table className="w-full">
                             <tbody>{parsed.skipped.map(s => (
-                              <tr key={s.line} className="border-b last:border-0"><td className="p-1.5 text-gray-400 w-16">Line {s.line}</td><td className="p-1.5 text-gray-600">{s.summary}</td><td className="p-1.5 text-amber-700">{s.reason}</td></tr>
+                              <tr key={s.line} className="border-b last:border-0"><td className="p-1.5 text-gray-400 w-16">{dp ? '#' : 'Line '}{s.line}</td><td className="p-1.5 text-gray-600">{s.summary}</td><td className="p-1.5 text-amber-700">{s.reason}</td></tr>
                             ))}</tbody>
                           </table>
                         </div>
@@ -382,7 +438,8 @@ const GivingImport: React.FC = () => {
           <div className="flex items-center gap-3 text-sm">
             <label className="flex items-center gap-1 text-gray-600">Group by
               <select value={groupBy} onChange={e => setGroupBy(e.target.value as typeof groupBy)} className="border rounded px-1 py-0.5">
-                <option value="auto">Auto</option><option value="deposit">{provider.label} batch / deposit</option><option value="date">Gift date</option>
+                <option value="auto">Auto</option>{provider.kind === 'file' && <option value="deposit">{provider.label} batch / deposit</option>}
+                <option value="date">Gift date</option><option value="week">Week (Mon–Sun)</option>
               </select>
             </label>
             {ignoredRows.length > 0 && (
@@ -469,7 +526,22 @@ const GivingImport: React.FC = () => {
                         ].filter(Boolean).join(' · ')}</div>
                         {r.status !== 'succeeded' && <span className="text-[10px] uppercase font-semibold text-amber-700">{r.status}</span>}
                       </td>
-                      <td className="p-2 text-gray-600 hidden lg:table-cell">{r.fundName || r.fundKey || '—'}</td>
+                      <td className="p-2 text-gray-600 hidden lg:table-cell">
+                        {fundKeyOf(r) ? (r.fundName || r.fundKey) : (
+                          <div>
+                            <div className="flex items-center">
+                              <select value={r.fundIdEff ?? ''} disabled={!canManage} data-testid="row-fund-select"
+                                onChange={e => setRowFundChoice(c => ({ ...c, [r.id]: e.target.value }))}
+                                className={`border rounded px-1 py-1 w-32 ${r.fundIdEff ? '' : 'border-red-300 bg-red-50'}`}>
+                                <option value="">Choose fund…</option>
+                                {(funds ?? []).map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
+                              </select>
+                              <ReasonBadge reason={r.fundIdEff ? r.fundReason : undefined} weak={r.fundReason === 'guess'} />
+                            </div>
+                            {r.memo && <div className="text-xs text-gray-400 mt-0.5 truncate max-w-[14rem]" title={r.memo}>“{r.memo}”</div>}
+                          </div>
+                        )}
+                      </td>
                       <td className="p-2 text-gray-600 hidden md:table-cell">{METHOD_LABEL[r.method] ?? r.method}</td>
                       <td className="p-2 text-right font-semibold">{money(r.amount)}</td>
                       <td className="p-2 text-right text-gray-500 hidden md:table-cell">{money(r.fee)}</td>

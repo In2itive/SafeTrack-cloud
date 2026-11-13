@@ -6,7 +6,9 @@
  * dedupe, giver/fund matching, posting to a batch, two-person sign-off — is
  * shared and knows nothing about the provider.
  *
- *   FileProvider  the church downloads a file (Pushpay CSV) and uploads it
+ *   FileProvider      the church downloads a table (Pushpay CSV) and uploads it
+ *   DocumentProvider  the church uploads/pastes documents, one gift each
+ *                     (Interac e-Transfer notification emails)
  *   FeedProvider  gifts arrive server-side (a Stripe webhook writes them with
  *                 stage_external_transactions_server); the app only reviews
  *
@@ -17,7 +19,7 @@
 export type ProviderId = 'pushpay' | 'stripe' | 'e_transfer';
 
 /** Electronic payment methods (database payment_method values). */
-export type ElectronicMethod = 'card' | 'bank_debit' | 'online';
+export type ElectronicMethod = 'card' | 'bank_debit' | 'online' | 'e_transfer';
 
 export type GiftStatus = 'succeeded' | 'pending' | 'failed' | 'refunded';
 
@@ -76,6 +78,10 @@ interface ProviderBase {
   id: ProviderId;
   label: string;
   description: string;
+  /** How the review screen groups gifts into batches by default. */
+  defaultGrouping?: 'deposit' | 'date' | 'week';
+  /** Text for the reconciliation panel: what the second person checks against. */
+  reconcileAgainst?: string;
 }
 
 export interface FileProvider extends ProviderBase {
@@ -90,11 +96,23 @@ export interface FileProvider extends ProviderBase {
   parse(table: CsvTable, mapping: ColumnMapping, options: ParseOptions): ParseResult;
 }
 
+/** One uploaded file, or one paste. */
+export interface SourceDoc { name: string; content: string | ArrayBuffer; lastModified?: number }
+
+export interface DocumentProvider extends ProviderBase {
+  kind: 'documents';
+  accept: string;
+  exportSteps: string[];
+  /** Placeholder for the paste box. */
+  pasteHint: string;
+  parseDocuments(docs: SourceDoc[]): Promise<ParseResult>;
+}
+
 export interface FeedProvider extends ProviderBase {
   kind: 'feed';
 }
 
-export type GivingProvider = FileProvider | FeedProvider;
+export type GivingProvider = FileProvider | DocumentProvider | FeedProvider;
 
 /** A staged gift as stored in external_transactions. */
 export interface StagedGift extends GiftRecord {
