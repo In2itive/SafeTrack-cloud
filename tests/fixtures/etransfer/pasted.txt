@@ -1,0 +1,13 @@
+INTERAC e-Transfer: PAT KIM sent you money.
+Date: November 15, 2026
+Hi GRACE COMMUNITY CHURCH,
+PAT KIM (pat.kim@example.com) sent you $25.00 (CAD) and the money has been automatically deposited.
+Message: General
+Reference Number: CAPASTE00001
+
+INTERAC e-Transfer: LEE WONG sent you money.
+Date: November 15, 2026
+Hi GRACE COMMUNITY CHURCH,
+LEE WONG (lee.wong@example.com) sent you $30.00 (CAD) and the money has been automatically deposited.
+Message: 101
+Reference Number: CAPASTE00002

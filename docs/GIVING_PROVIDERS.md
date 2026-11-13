@@ -59,6 +59,44 @@ Pushpay doesn't publish a fixed column list, so the adapter:
 
 Once a real Pushpay export is checked, its exact headers go in `tests/fixtures/pushpay-sample.csv`. The unit tests (`npm run test:unit`) use that fixture.
 
+## e-Transfer adapter
+
+`services/giving/providers/etransfer.ts` is a **document** provider: one Interac deposit notification email per gift. e-Transfers post as their own `e_transfer` batches, grouped by week (Monday–Sunday) by default.
+
+**What it accepts:**
+- `.eml` files, saved from Gmail (⋮ → Download message) or Outlook;
+- `.mbox` exports;
+- email text pasted into the screen, one email or several.
+
+Forwarded emails work too: the parser uses the original Interac date and sender, not the forward's.
+
+**What it reads, by label and phrase (English and French):**
+- the sender's name (ALL-CAPS names are converted to Title Case);
+- the sender's email: from the body, the sender label, or Reply-To;
+- the amount (`$1,100.00` or `1 250,50 $`);
+- the message/memo;
+- the reference number, which is the gift ID used for dedupe;
+- the date, from the email's Date header.
+
+**What it skips:** money requests, reminders, cancellations and expiry notices.
+
+**Warning:** an email that doesn't show `notify@payments.interac.ca` gets a warning. Spoofed "you've been paid" emails exist, and the bank statement is the final check.
+
+**Matching:**
+- an envelope # in the memo (`env 100`, `Envelope #45`, `enveloppe no 205`, or just `101`) matches the giver directly;
+- otherwise the sender's email matches the giver's e-Transfer ID or email;
+- otherwise the name, if exactly one giver has it.
+
+**Funds:** a fund named in the memo is picked per gift. Otherwise the gift defaults to General, flagged as a guess.
+
+**Learning:** posting records the sender's email in the giver's first free e-Transfer ID slot (migration 13), so the next gift from them matches automatically.
+
+**Planned automatic feed:**
+1. The church adds a forwarding rule from the mailbox that receives Interac notifications to a per-church inbound address. Cloudflare Email Routing → Worker, or Postmark/Mailgun inbound, all work.
+2. A webhook Edge Function parses each forwarded email with the same `parseInteracEmail()` (postal-mime runs in Deno).
+3. It verifies the original sender is Interac.
+4. It calls `stage_external_transactions_server(church, 'e_transfer', rows)`. Gifts then wait on the review screen with nothing to upload.
+
 ## Adding the Stripe module (planned)
 
 The Stripe module is a **feed** provider: gifts arrive by webhook, not by file upload.

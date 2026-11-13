@@ -8,7 +8,8 @@
  */
 import type { GivingProvider, ProviderId } from '../types';
 import { pushpayProvider } from './pushpay';
+import { etransferProvider } from './etransfer';
 
-export const PROVIDERS: GivingProvider[] = [pushpayProvider];
+export const PROVIDERS: GivingProvider[] = [pushpayProvider, etransferProvider];
 
 export const getProvider = (id: ProviderId) => PROVIDERS.find(p => p.id === id);

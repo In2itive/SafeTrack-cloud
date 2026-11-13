@@ -167,6 +167,18 @@ delete from public.batches where id = :'sbatch';
 select pg_temp.expect_eq((select (donation_id is null)::text from public.external_transactions where id = :'tx_s'), 'true',
   'deleting the batch makes its gifts available again');
 
+-- ---------- e-Transfer: registry learns the sender's email ----------
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000e3';
+select public.stage_external_transactions(:'church_e', 'e_transfer',
+  '[{"external_id":"CAREF0000001","gift_date":"2026-11-15","amount":"30","payment_method":"e_transfer","status":"succeeded","payer_external_id":"sam.lee@example.com","payer_email":"sam.lee@example.com","payer_name":"Sam Lee","memo":"Missions"}]') \gset
+select id as tx_e from public.external_transactions where church_id = :'church_e' and provider = 'e_transfer' and external_id = 'CAREF0000001' \gset
+select (public.post_external_batch(:'church_e', 'e_transfer', array[:'tx_e']::uuid[], null,
+  jsonb_build_array(jsonb_build_object('id', :'tx_e', 'giver_id', :'g_sam', 'fund_id', :'fund_mis'))) ->> 'batch_id') as ebatch \gset
+select pg_temp.expect_eq((select source::text || ' ' || (select string_agg(payment_method::text || ' ' || notes, ',') from public.donations where batch_id = :'ebatch')
+                          from public.batches where id = :'ebatch'),
+  'e_transfer e_transfer e-Transfer CAREF0000001 — Missions', 'e-Transfer batch with e_transfer donation and reference in notes');
+select pg_temp.expect_eq((select etransfer_id from public.givers where id = :'g_sam'), 'sam.lee@example.com', 'giver learns e-Transfer email');
+
 -- ---------- ignore is audited ----------
 set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000e3';
 update public.external_transactions set ignored = true where id = :'tx3';

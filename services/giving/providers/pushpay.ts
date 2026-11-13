@@ -216,6 +216,7 @@ export const pushpayProvider: FileProvider = {
     'Envelope report (Envelope #, Amount, Date, Fund): export it as CSV and upload it here. Gifts match givers by envelope number.',
     'Or, in Pushpay Transactions: set the period, Apply Filter, then Export → "to CSV (Legacy)".',
   ],
+  reconcileAgainst: 'the Pushpay deposit report and the bank statement',
   fields: FIELDS,
   detectMapping,
   missingFields,

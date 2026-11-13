@@ -7,7 +7,7 @@ import type { FundEntity, Giver } from '../../types';
 import type { GiftRecord } from './types';
 
 export type GiverReason = 'envelope' | 'remembered' | 'provider id' | 'email' | 'name';
-export type FundReason = 'remembered' | 'name' | 'guess';
+export type FundReason = 'remembered' | 'name' | 'memo' | 'guess';
 
 export interface GiverSuggestion { giverId?: string; reason?: GiverReason; candidates?: string[] }
 export interface FundSuggestion { fundId?: string; reason?: FundReason }
@@ -104,7 +104,13 @@ export function suggestFund(gift: GiftRecord, ctx: MatchContext): FundSuggestion
   const names = [gift.fundName, gift.fundKey].filter(Boolean).map(s => s!.trim().toLowerCase());
   const exact = ctx.funds.find(f => names.includes(f.name.trim().toLowerCase()));
   if (exact) return { fundId: exact.id, reason: 'name' };
-  const text = `${key} ${gift.fundName ?? ''}`.toLowerCase();
+  // No fund field (e-Transfers): look for exactly one fund named in the memo
+  if (!key && gift.memo) {
+    const memo = ` ${normName(gift.memo)} `;
+    const hits = ctx.funds.filter(f => f.name.toLowerCase() !== 'internal' && memo.includes(` ${normName(f.name)} `));
+    if (hits.length === 1) return { fundId: hits[0].id, reason: 'memo' };
+  }
+  const text = `${key} ${gift.fundName ?? ''} ${key ? '' : gift.memo ?? ''}`.toLowerCase();
   if (!key || /tithe|offering|general|\bgen\b|most needed/.test(text)) {
     const general = ctx.funds.find(f => f.name.toLowerCase() === 'general');
     if (general) return { fundId: general.id, reason: 'guess' };
