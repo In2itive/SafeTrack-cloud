@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { User, UserRole } from '../types';
 import { useLive, listMembers, addMember, updateMember, removeMember } from '../services/repo';
+import DataTable from './DataTable';
 import { useAuth } from '../contexts/AuthContext';
 import { Users, Plus, Edit, Trash2, Shield, Mail, Lock, User as UserIcon, X, Check } from 'lucide-react';
 
@@ -111,54 +112,65 @@ const UserManagement = () => {
       {loadError && (
         <div className="bg-red-50 text-red-600 p-3 rounded-xl text-sm mb-6 border border-red-100">{loadError}</div>
       )}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {users?.map(user => (
-          <div key={user.id} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow relative group">
-            <div className="flex justify-between items-start mb-4">
-              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                user.role === UserRole.Administrator ? 'bg-purple-100 text-purple-600' :
-                user.role === UserRole.Treasurer ? 'bg-green-100 text-green-600' :
-                user.role === UserRole.Envelope ? 'bg-blue-100 text-blue-600' :
-                'bg-gray-100 text-gray-600'
-              }`}>
-                <Shield className="w-6 h-6" />
+      <DataTable<User>
+        rows={users}
+        rowKey={u => u.id!}
+        initialSort={{ key: 'name', dir: 'asc' }}
+        onRowClick={u => handleOpenModal(u)}
+        countLabel={n => `${n} user${n === 1 ? '' : 's'}`}
+        empty="No users yet."
+        columns={[
+          {
+            key: 'name', label: 'Name', sortValue: u => u.name,
+            render: u => (
+              <div className="font-semibold text-gray-800">
+                {u.name}{u.id === currentUser?.id && <span className="ml-2 text-xs font-normal text-gray-400">(you)</span>}
               </div>
-              <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button 
-                  onClick={() => handleOpenModal(user)}
-                  className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-church-600"
+            ),
+          },
+          { key: 'email', label: 'Email', sortValue: u => u.email, render: u => <span className="text-gray-600">{u.email}</span> },
+          {
+            key: 'role', label: 'Role', className: 'w-40',
+            sortValue: u => [UserRole.Administrator, UserRole.Treasurer, UserRole.Envelope, UserRole.Teller].indexOf(u.role),
+            render: u => (
+              <span className={`inline-block px-2 py-0.5 rounded-md text-xs font-semibold uppercase tracking-wide ${
+                u.role === UserRole.Administrator ? 'bg-purple-100 text-purple-700' :
+                u.role === UserRole.Treasurer ? 'bg-green-100 text-green-700' :
+                u.role === UserRole.Envelope ? 'bg-blue-100 text-blue-700' :
+                'bg-gray-100 text-gray-700'}`}>{u.role}</span>
+            ),
+          },
+          {
+            key: 'status', label: 'Status', className: 'w-28', sortValue: u => (u.isActive === false ? 1 : 0),
+            render: u => u.isActive === false
+              ? <span className="text-xs text-gray-400">Inactive</span>
+              : <span className="text-xs text-green-600 font-medium">Active</span>,
+          },
+          {
+            key: 'actions', label: '', className: 'w-24', align: 'right',
+            render: u => (
+              <div className="flex justify-end gap-1">
+                <button
+                  onClick={e => { e.stopPropagation(); handleOpenModal(u); }}
+                  className="p-1.5 rounded-lg text-gray-300 group-hover:text-gray-500 hover:bg-gray-100 hover:text-church-600"
+                  title="Edit user" aria-label={`Edit ${u.name}`}
                 >
                   <Edit className="w-4 h-4" />
                 </button>
-                {user.id !== currentUser?.id && (
-                  <button 
-                    onClick={() => user.id && handleDelete(user.id)}
-                    className="p-2 hover:bg-red-50 rounded-lg text-gray-500 hover:text-red-600"
+                {u.id !== currentUser?.id && (
+                  <button
+                    onClick={e => { e.stopPropagation(); u.id && handleDelete(u.id); }}
+                    className="p-1.5 rounded-lg text-gray-300 group-hover:text-gray-500 hover:bg-red-50 hover:text-red-600"
+                    title="Remove from church" aria-label={`Remove ${u.name}`}
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
                 )}
               </div>
-            </div>
-            
-            <h3 className="text-lg font-bold text-gray-800">{user.name}</h3>
-            <p className="text-sm text-gray-500 mb-4">{user.isActive === false ? 'Inactive' : 'Active'}</p>
-            
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-sm text-gray-600">
-                <Shield className="w-4 h-4 text-gray-400" />
-                <span className="font-medium bg-gray-100 px-2 py-0.5 rounded text-xs uppercase tracking-wide">
-                  {user.role}
-                </span>
-              </div>
-              <div className="flex items-center gap-2 text-sm text-gray-600">
-                <Mail className="w-4 h-4 text-gray-400" />
-                {user.email}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
+            ),
+          },
+        ]}
+      />
 
       {/* Modal */}
       {isModalOpen && (

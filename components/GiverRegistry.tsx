@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useLive, listGivers, getNextEnvelopeNumber, addGiver, updateGiver } from '../services/repo';
+import DataTable from './DataTable';
 import { UserPlus, Search, User, MapPin, Mail, CreditCard, Smartphone, Pencil, Plus } from 'lucide-react';
 import { Giver } from '../types';
 
@@ -73,11 +74,11 @@ const GiverRegistry: React.FC = () => {
     setFormData(initialForm);
   };
 
-  const filteredGivers = givers?.filter(g => 
-    g.name.toLowerCase().includes(search.toLowerCase()) || 
-    (g.name2 && g.name2.toLowerCase().includes(search.toLowerCase())) ||
-    g.envelopeNumber.toString().includes(search) ||
-    (g.eTransferId && g.eTransferId.toLowerCase().includes(search.toLowerCase()))
+  const q = search.trim().toLowerCase();
+  const filteredGivers = givers?.filter(g => !q ||
+    [g.name, g.name2, g.email, g.email2, g.address1, g.address2, g.eTransferId, g.eTransferId2, g.pushPayId]
+      .some(v => v?.toLowerCase().includes(q)) ||
+    g.envelopeNumber.toString() === q || g.envelopeNumber.toString().startsWith(q)
   );
 
   return (
@@ -101,91 +102,73 @@ const GiverRegistry: React.FC = () => {
         <Search className="absolute left-4 top-3.5 text-gray-400 w-5 h-5" />
         <input 
           type="text" 
-          placeholder="Search by name, envelope #, or ID..." 
+          placeholder="Search by name, envelope #, email, address, or e-Transfer / PushPay ID..." 
           className="w-full pl-12 pr-4 py-3 rounded-2xl border-none shadow-md focus:ring-2 focus:ring-church-500 bg-gray-50"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
       </div>
 
-      {/* Giver Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        {filteredGivers?.map(giver => (
-          <div key={giver.id} className="bg-white p-6 rounded-3xl shadow-md hover:shadow-xl transition-shadow border border-gray-100 flex flex-col h-full relative group">
-             {/* Edit Button */}
-             <button 
-               onClick={() => openEditGiverModal(giver)}
-               className="absolute top-6 right-6 p-2 text-gray-300 hover:text-church-500 hover:bg-church-50 rounded-full transition-colors opacity-0 group-hover:opacity-100"
-               title="Edit Profile"
-             >
-               <Pencil className="w-5 h-5" />
-             </button>
-
-             <div className="flex justify-between items-start mb-4 pr-10">
-                <div className="w-14 h-14 bg-church-900 rounded-2xl flex items-center justify-center text-white font-bold text-xl shadow-church-900/20 shadow-lg">
-                  {giver.envelopeNumber}
-                </div>
-                <div className="p-2 bg-gray-50 rounded-full">
-                  <User className="w-5 h-5 text-gray-400" />
-                </div>
-             </div>
-             
-             <div className="mb-4">
-                <h3 className="text-lg font-bold text-gray-800 leading-tight">{giver.name}</h3>
-                {giver.name2 && (
-                  <p className="text-md font-medium text-church-500">& {giver.name2}</p>
-                )}
-             </div>
-
-             <div className="space-y-2 mb-4 flex-1">
-               {(giver.address1 || giver.address2 || giver.address3) ? (
-                 <div className="flex gap-2 items-start text-sm text-gray-500">
-                    <MapPin className="w-4 h-4 mt-1 shrink-0 opacity-50" />
-                    <div className="leading-snug">
-                      {giver.address1 && <div>{giver.address1}</div>}
-                      {giver.address2 && <div>{giver.address2}</div>}
-                      {giver.address3 && <div>{giver.address3}</div>}
-                    </div>
-                 </div>
-               ) : (
-                 <p className="text-xs text-gray-400 italic pl-6">No address on file</p>
-               )}
-               
-               {(giver.email || giver.email2) && (
-                 <div className="flex gap-2 items-start text-sm text-gray-500">
-                   <Mail className="w-4 h-4 shrink-0 opacity-50 mt-0.5" />
-                   <div className="truncate">
-                      {giver.email && <div>{giver.email}</div>}
-                      {giver.email2 && <div className="text-gray-400 text-xs">{giver.email2}</div>}
-                   </div>
-                 </div>
-               )}
-             </div>
-
-             {/* IDs Footer */}
-             <div className="pt-4 border-t border-gray-50 flex flex-wrap gap-2">
-                {giver.eTransferId && (
-                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-green-50 text-green-700 text-xs font-bold border border-green-100" title="Primary eTransfer ID">
-                    <Smartphone className="w-3 h-3" /> {giver.eTransferId}
-                  </span>
-                )}
-                {giver.eTransferId2 && (
-                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-green-50/50 text-green-600 text-xs font-bold border border-green-100" title="Secondary eTransfer ID">
-                    <Smartphone className="w-3 h-3" /> {giver.eTransferId2}
-                  </span>
-                )}
-                {giver.pushPayId && (
-                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-orange-50 text-orange-700 text-xs font-bold border border-orange-100">
-                    <CreditCard className="w-3 h-3" /> {giver.pushPayId}
-                  </span>
-                )}
-                {!giver.eTransferId && !giver.eTransferId2 && !giver.pushPayId && (
-                   <span className="text-xs text-gray-300 font-medium">No Digital IDs</span>
-                )}
-             </div>
-          </div>
-        ))}
-      </div>
+      {/* Giver table */}
+      <DataTable<Giver>
+        rows={filteredGivers}
+        rowKey={g => g.id!}
+        initialSort={{ key: 'env', dir: 'asc' }}
+        onRowClick={openEditGiverModal}
+        countLabel={n => `${n} giver${n === 1 ? '' : 's'}${search ? ` matching "${search}"` : ''}`}
+        empty={search ? 'No givers match that search.' : 'No givers yet. Register the first one.'}
+        columns={[
+          {
+            key: 'env', label: 'Env #', className: 'w-20', sortValue: g => g.envelopeNumber,
+            render: g => <span className="inline-block min-w-[3rem] text-center font-bold text-church-900 bg-blue-50 rounded-md px-2 py-0.5">{g.envelopeNumber}</span>,
+          },
+          {
+            key: 'name', label: 'Name', sortValue: g => g.name,
+            render: g => (
+              <div>
+                <div className="font-semibold text-gray-800">{g.name}</div>
+                {g.name2 && <div className="text-xs text-church-500">& {g.name2}</div>}
+              </div>
+            ),
+          },
+          {
+            key: 'address', label: 'Address', className: 'hidden lg:table-cell', sortValue: g => g.address1 || null,
+            render: g => (g.address1 || g.address2)
+              ? <div className="text-gray-600 leading-snug">{[g.address1, g.address2, g.address3].filter(Boolean).join(', ')}</div>
+              : <span className="text-xs text-gray-300 italic">none</span>,
+          },
+          {
+            key: 'email', label: 'Email', className: 'hidden md:table-cell', sortValue: g => g.email || null,
+            render: g => g.email
+              ? <div className="text-gray-600 truncate max-w-[16rem]">{g.email}{g.email2 && <div className="text-xs text-gray-400">{g.email2}</div>}</div>
+              : <span className="text-xs text-gray-300 italic">none</span>,
+          },
+          {
+            key: 'ids', label: 'Digital IDs', className: 'hidden xl:table-cell',
+            sortValue: g => g.eTransferId || g.pushPayId || null,
+            render: g => (
+              <div className="flex flex-wrap gap-1">
+                {g.eTransferId && <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-50 text-green-700 text-xs border border-green-100" title="e-Transfer ID"><Smartphone className="w-3 h-3" />{g.eTransferId}</span>}
+                {g.eTransferId2 && <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-50/50 text-green-600 text-xs border border-green-100" title="Second e-Transfer ID"><Smartphone className="w-3 h-3" />{g.eTransferId2}</span>}
+                {g.pushPayId && <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-orange-50 text-orange-700 text-xs border border-orange-100" title="PushPay ID"><CreditCard className="w-3 h-3" />{g.pushPayId}</span>}
+                {!g.eTransferId && !g.eTransferId2 && !g.pushPayId && <span className="text-xs text-gray-300">-</span>}
+              </div>
+            ),
+          },
+          {
+            key: 'edit', label: '', className: 'w-12', align: 'right',
+            render: g => (
+              <button
+                onClick={e => { e.stopPropagation(); openEditGiverModal(g); }}
+                className="p-1.5 text-gray-300 group-hover:text-church-500 hover:bg-church-50 rounded-lg"
+                title="Edit giver" aria-label={`Edit ${g.name}`}
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
+            ),
+          },
+        ]}
+      />
 
       {/* Add/Edit Modal */}
       {showModal && (
