@@ -78,8 +78,9 @@ await test('mbox with two messages; duplicates in one upload are dropped', async
 await test('Whole folder at once', async () => {
   const files = readdirSync(dir).filter(f => /\.(eml|txt)$/.test(f));
   const r = await etransferProvider.parseDocuments(files.map(doc));
-  assert.equal(r.gifts.length, 6);
+  assert.equal(r.gifts.length, 7);                      // incl. suspicious.eml, which is read but flagged
   assert.equal(r.skipped.length, 1);
+  assert.deepEqual(r.gifts.find(g => g.payerName === 'Kim Park')?.flags?.sort(), ['no_reference', 'not_from_interac']);
 });
 
 await test('Matching: e-Transfer ID / envelope / memo fund', async () => {

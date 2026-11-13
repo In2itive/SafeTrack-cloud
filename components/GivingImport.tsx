@@ -599,6 +599,7 @@ const GivingImport: React.FC = () => {
                             onChange={e => setGiverChoice(c => ({ ...c, [r.id]: e.target.value }))}
                             className={`border rounded px-1 py-1 w-56 ${r.giverIdEff ? '' : 'border-red-300 bg-red-50'}`}>
                             <option value="">{r.candidates?.length ? `${r.candidates.length} possible matches…` : 'Choose giver…'}</option>
+                            {r.giverIdEff && !giverById.has(r.giverIdEff) && <option value={r.giverIdEff}>{payerLabel(r)} (new — loading…)</option>}
                             {r.candidates?.length ? (
                               <optgroup label="Possible matches">
                                 {r.candidates.map(id => { const x = giverById.get(id); return x && <option key={id} value={id}>{x.name} (#{x.envelopeNumber})</option>; })}

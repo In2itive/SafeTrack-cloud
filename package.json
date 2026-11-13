@@ -9,7 +9,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "e2e": "node tests/e2e/admin-flow.mjs && node tests/e2e/tellers-flow.mjs && node tests/e2e/giving-flow.mjs && node tests/e2e/etransfer-flow.mjs",
+    "e2e": "node tests/e2e/admin-flow.mjs && node tests/e2e/tellers-flow.mjs && node tests/e2e/giving-flow.mjs && node tests/e2e/etransfer-flow.mjs && node tests/e2e/mailbox-flow.mjs",
     "seed:demo": "node --env-file=.env scripts/seed-demo.mjs",
     "test:unit": "tsx tests/unit/giving.test.ts && tsx tests/unit/etransfer.test.ts && tsx tests/unit/mailbox.test.ts"
   },
