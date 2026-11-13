@@ -35,7 +35,7 @@ const Login: React.FC<{ onCreateChurch?: () => void }> = ({ onCreateChurch }) =>
 
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl shadow-xl p-8 w-full max-w-sm border border-gray-100">
+      <div className="bg-white rounded-3xl shadow-xl p-6 w-full max-w-sm border border-gray-100">
         <div className="text-center mb-8">
           <div className="w-16 h-16 bg-church-900 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg transform -rotate-3">
             {isSecondaryLogin ? <Users className="w-8 h-8 text-white" /> : <Lock className="w-8 h-8 text-white" />}

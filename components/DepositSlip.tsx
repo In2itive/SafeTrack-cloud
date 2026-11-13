@@ -79,7 +79,8 @@ const DepositSlip = forwardRef<ReportRef, DepositSlipProps>(({ batchIdProp, hidd
 
     try {
       const pdfBlob = await html2pdf().set(opt).from(element).output('blob');
-      const safeFilename = `Batch_${shortId(batch.id)}_Deposit.pdf`;
+      const timestamp = new Date().getTime();
+      const safeFilename = `Batch_${shortId(batch.id)}_Deposit_${timestamp}.pdf`;
       
       await sendEmailWithPDF(pdfBlob, safeFilename, 'deposit');
       if (!hiddenMode) alert('Email sent successfully!');
@@ -172,7 +173,7 @@ const DepositSlip = forwardRef<ReportRef, DepositSlipProps>(({ batchIdProp, hidd
       )}
 
       {/* Report Paper */}
-      <div ref={reportRef} className="max-w-4xl mx-auto bg-white p-12 rounded-3xl shadow-xl print:shadow-none print:p-8 print:max-w-none">
+      <div ref={reportRef} className="max-w-4xl mx-auto bg-white p-6 rounded-3xl shadow-xl print:shadow-none print:p-0 print:max-w-none">
         
         {/* Header Section - Reorganized for Print Compactness */}
         <div className="flex justify-between items-start border-b-2 border-gray-800 pb-6 mb-8 print:pb-4 print:mb-6">
@@ -298,27 +299,19 @@ const DepositSlip = forwardRef<ReportRef, DepositSlipProps>(({ batchIdProp, hidd
           </div>
         </div>
 
-        {/* Signature Line */}
+        {/* Signature Line: the original two tellers always stay on the slip; an admin adjustment adds a line */}
         <div className={`mt-16 pt-8 border-t border-gray-300 grid ${batch.adjustedBy?.length ? 'grid-cols-4' : 'grid-cols-3'} gap-12 text-xs text-gray-400 uppercase tracking-widest break-inside-avoid print:mt-8 print:pt-4`}>
-          <div className="space-y-12 print:space-y-8">
-            <div>
-              <div className="border-b border-gray-400 mb-2 h-6 flex items-end">
-                <span className="text-gray-800 font-bold text-sm normal-case">{batch.finalizedBy?.[0] || ''}</span>
+          {[0, 1].map(i => (
+            <div key={i} className="space-y-12 print:space-y-8">
+              <div>
+                <div className="border-b border-gray-400 mb-2 h-6 flex items-end">
+                  <span className="text-gray-800 font-bold text-sm normal-case">{batch.finalizedBy?.[i] || ''}</span>
+                </div>
+                Teller {i + 1} Secure Sign in
               </div>
-              Teller 1 Secure Sign in
             </div>
-          </div>
-          
-          <div className="space-y-12 print:space-y-8">
-            <div>
-              <div className="border-b border-gray-400 mb-2 h-6 flex items-end">
-                <span className="text-gray-800 font-bold text-sm normal-case">{batch.finalizedBy?.[1] || ''}</span>
-              </div>
-              Teller 2 Secure Sign in
-            </div>
-          </div>
+          ))}
 
-          {/* After an admin adjustment the original tellers stay on the slip; the admin signs as well */}
           {batch.adjustedBy?.length ? (
             <div className="space-y-12 print:space-y-8">
               <div>

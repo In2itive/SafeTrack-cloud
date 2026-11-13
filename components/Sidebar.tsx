@@ -68,11 +68,11 @@ const Sidebar: React.FC = () => {
             </>
           )}
         </div>
-        <button
+        <button 
           onClick={() => setShowPw(true)}
-          className="w-full flex items-center gap-3 px-4 py-2 rounded-xl text-blue-200 hover:bg-church-800 hover:text-white transition-colors text-sm"
+          className="w-full flex items-center justify-center gap-2 mb-3 px-4 py-2 text-xs font-bold rounded-xl text-blue-100 hover:bg-church-800 transition-colors"
         >
-          <KeyRound className="w-4 h-4" />
+          <KeyRound className="w-3 h-3" />
           Change Passwords
         </button>
         <button 

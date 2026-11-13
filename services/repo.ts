@@ -379,6 +379,11 @@ export async function countBatches(): Promise<number> {
   return count ?? 0;
 }
 
+export async function deleteDonation(id: string): Promise<void> {
+  // Splits cascade; RLS + the lock trigger refuse this on a finalized batch.
+  await write(async () => { must(await supabase.from('donations').delete().eq('id', id)); });
+}
+
 // ---------------------------------------------------------------------------
 // Saving a batch (one atomic call)
 // ---------------------------------------------------------------------------

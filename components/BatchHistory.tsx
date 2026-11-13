@@ -207,72 +207,57 @@ const BatchHistory: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 h-full flex flex-col relative">
-      <h2 className="text-3xl font-bold text-gray-800">Batch History & Audit</h2>
-
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 min-h-0">
+    <div className="absolute inset-0 flex flex-col -mx-4 px-4 overflow-hidden">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1 min-h-0 pb-4">
         {/* Left: Batch List */}
-        <div className="lg:col-span-4 space-y-4 overflow-y-auto max-h-[calc(100vh-12rem)] pr-2">
-          {batches?.map(batch => (
-            <div 
-              key={batch.id} 
-              onClick={() => setSelectedBatchId(batch.id || null)}
-              className={`p-4 rounded-2xl cursor-pointer transition-all ${
-                selectedBatchId === batch.id 
-                  ? 'bg-church-900 text-white shadow-xl scale-[1.02] border border-church-900' 
-                  : 'bg-white hover:bg-blue-50 border border-gray-400'
-              }`}
-            >
-              <div className="flex justify-between items-center mb-2">
-                <span className="font-bold">Batch #{shortId(batch.id)}</span>
-                <span className={`text-xs px-2 py-1 rounded-full font-bold ${
-                  batch.status === BatchStatus.Finalized ? 'bg-green-400 text-green-900' : 'bg-yellow-400 text-yellow-900'
-                }`}>
-                  {batch.status}
-                </span>
-              </div>
-              
-              <div className={`flex items-center gap-1 text-xs mb-2 ${selectedBatchId === batch.id ? 'text-blue-200' : 'text-gray-400'}`}>
-                 {getSourceIcon(batch.source)} {batch.source}
-              </div>
+        <div className="lg:col-span-4 h-full flex flex-col min-h-0 pr-2">
+          <div className="pb-3 shrink-0">
+            <h2 className="text-3xl font-bold text-gray-800">Batch History</h2>
+          </div>
+          <div className="space-y-2 overflow-y-scroll flex-1 pb-4 pr-1">
+            {batches?.map(batch => (
+              <div 
+                key={batch.id} 
+                onClick={() => setSelectedBatchId(batch.id || null)}
+                className={`p-3 rounded-xl cursor-pointer transition-all ${
+                  selectedBatchId === batch.id 
+                    ? 'bg-church-900 text-white shadow-xl scale-[1.02] border border-church-900' 
+                    : 'bg-white hover:bg-blue-50 border border-gray-400'
+                }`}
+              >
+                <div className="flex justify-between items-center mb-2">
+                  <span className="font-bold">Batch #{shortId(batch.id)}</span>
+                  <span className={`text-xs px-2 py-1 rounded-full font-bold ${
+                    batch.status === BatchStatus.Finalized ? 'bg-green-400 text-green-900' : 'bg-yellow-400 text-yellow-900'
+                  }`}>
+                    {batch.status}
+                  </span>
+                </div>
+                
+                <div className={`flex items-center gap-1 text-xs mb-2 ${selectedBatchId === batch.id ? 'text-blue-200' : 'text-gray-400'}`}>
+                   {getSourceIcon(batch.source)} {batch.source}
+                </div>
 
-              <div className="flex justify-between text-sm opacity-80">
-                <span>{new Date(batch.date).toLocaleDateString()}</span>
-                <span className="font-mono font-bold">${batch.totalAmount.toFixed(2)}</span>
+                <div className="flex justify-between text-sm opacity-80">
+                  <span>{new Date(batch.date).toLocaleDateString()}</span>
+                  <span className="font-mono font-bold">${batch.totalAmount.toFixed(2)}</span>
+                </div>
               </div>
-            </div>
-          ))}
-          {(!batches || batches.length === 0) && <p className="text-gray-400 text-center py-10">No batches found.</p>}
+            ))}
+            {(!batches || batches.length === 0) && <p className="text-gray-400 text-center py-10">No batches found.</p>}
+          </div>
         </div>
 
         {/* Right: Audit & Details */}
-        <div className="lg:col-span-8 bg-white rounded-3xl shadow-xl border border-gray-100 flex flex-col overflow-hidden">
+        <div className="lg:col-span-8 bg-white rounded-3xl shadow-xl border border-gray-100 flex flex-col overflow-hidden h-full min-h-0">
           {activeBatch ? (
-            <div className="flex flex-col h-full">
+            <div className="flex flex-col h-full min-h-0">
                {/* Header */}
-               <div className="p-6 border-b border-gray-100 bg-gray-50/50">
-                 <div className="flex justify-between items-start mb-4">
-                   <div>
-                     <h3 className="text-2xl font-bold text-gray-800">Batch #{shortId(activeBatch.id)}</h3>
-                     <div className="flex gap-2 mb-1 mt-1">
-                        <span className="flex items-center gap-1 bg-white px-2 py-0.5 rounded border border-gray-200 text-xs font-bold text-gray-600">
-                           {getSourceIcon(activeBatch.source)} {activeBatch.source}
-                        </span>
-                     </div>
-                     <div className="flex items-center gap-4 text-sm mt-2">
-                        <span className="text-gray-500">Date: <span className="font-semibold">{new Date(activeBatch.date).toLocaleDateString()}</span></span>
-                        <span className="text-gray-500">Total: <span className="font-semibold text-church-900">${activeBatch.totalAmount.toFixed(2)}</span></span>
-                        {activeBatch.status === BatchStatus.Finalized && (
-                          <button
-                            onClick={handleEmailAll}
-                            disabled={isEmailingAll}
-                            className="flex items-center justify-center gap-2 w-56 py-2 bg-white border border-gray-400 text-gray-600 font-bold rounded-lg hover:bg-blue-50 hover:text-blue-700 hover:border-blue-400 transition-colors text-sm disabled:opacity-50"
-                          >
-                            <Mail className="w-6 h-6" /> {isEmailingAll ? 'Sending...' : 'Email All Reports'}
-                          </button>
-                        )}
-                     </div>
-                   </div>
+               <div className="p-4 border-b border-gray-100 bg-gray-50/50 shrink-0 flex flex-col gap-3">
+                 
+                 {/* Line 1: Title and Actions */}
+                 <div className="flex justify-between items-start md:items-center gap-4">
+                   <h3 className="text-2xl font-bold text-gray-800">Batch #{shortId(activeBatch.id)}</h3>
                    
                    {/* Hidden Reports for Emailing */}
                    <div style={{ position: 'absolute', top: '-9999px', left: '-9999px', width: '1024px' }}>
@@ -281,40 +266,39 @@ const BatchHistory: React.FC = () => {
                      <DepositSlip ref={depositRef} batchIdProp={activeBatch.id} hiddenMode={true} />
                    </div>
 
-                   {/* Batch Management Actions */}
-                   <div className="flex items-center gap-2">
+                   <div className="flex flex-wrap items-center gap-2">
                      {activeBatch.status === BatchStatus.Open ? (
                        <>
                         <button 
                           onClick={() => setShowDeleteModal(true)}
-                          className="p-3 rounded-xl bg-white border border-red-100 text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                          className="p-1.5 rounded-lg bg-white border border-red-100 text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors shadow-sm"
                           title="Delete Batch"
                         >
-                          <Trash2 className="w-5 h-5" />
+                          <Trash2 className="w-4 h-4" />
                         </button>
                         <button 
                           onClick={() => navigate(`/batch-entry?batchId=${activeBatch.id}`)}
-                          className="flex items-center gap-2 px-4 py-3 rounded-xl font-bold bg-white border border-gray-400 text-gray-700 hover:bg-gray-100 shadow-sm transition-colors"
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold bg-white border border-gray-400 text-gray-700 hover:bg-gray-100 shadow-sm transition-colors"
                         >
                           <Edit className="w-4 h-4" /> Edit Batch
                         </button>
                         <button 
                           onClick={handleFinalizeClick}
-                          className={`flex items-center gap-2 px-6 py-3 rounded-xl shadow-lg transition-all font-bold ${
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm shadow-sm transition-all font-bold ${
                             isReadyToFinalize 
                               ? 'bg-green-600 hover:bg-green-700 text-white animate-pulse' 
                               : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200 border border-yellow-300'
                           }`}
                         >
-                          {isReadyToFinalize ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
-                          {isReadyToFinalize ? 'Finalize Batch' : 'Audit Incomplete'}
+                           {isReadyToFinalize ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
+                           {isReadyToFinalize ? 'Finalize Batch' : 'Audit Incomplete'}
                         </button>
                        </>
                      ) : (
                        <>
                          <button 
                            onClick={() => setShowDeleteModal(true)}
-                           className="p-2 rounded-xl bg-white border border-red-100 text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                           className="p-1.5 rounded-lg bg-white border border-red-100 text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors shadow-sm"
                            title="Delete Batch"
                          >
                            <Trash2 className="w-4 h-4" />
@@ -322,48 +306,68 @@ const BatchHistory: React.FC = () => {
                          {user?.role === UserRole.Administrator && (
                            <button 
                              onClick={() => setShowUnlockModal(true)}
-                             className="flex items-center gap-2 px-4 py-2 rounded-xl font-bold bg-white border border-yellow-400 text-yellow-700 hover:bg-yellow-50 shadow-sm transition-colors"
+                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold bg-white border border-yellow-400 text-yellow-700 hover:bg-yellow-50 shadow-sm transition-colors"
                              title="Unlock Batch (Admin Only)"
                            >
                              <Unlock className="w-4 h-4" /> Unlock
                            </button>
                          )}
-                         <div className="flex items-center gap-2 text-green-700 bg-green-100 px-4 py-2 rounded-xl font-bold border border-green-200">
-                           <CheckCircle className="w-5 h-5" /> Batch Locked
+                         <div className="flex items-center gap-1.5 text-green-700 bg-green-100 px-3 py-1.5 rounded-lg text-sm font-bold border border-green-200 shadow-sm">
+                           <CheckCircle className="w-4 h-4" /> Batch Locked
                          </div>
                        </>
                      )}
                    </div>
                  </div>
 
-                 {/* Reports Row */}
-                 <div className="flex justify-end items-center gap-2 pt-4 border-t border-gray-200/50">
-                    <span className="text-xs font-bold text-gray-400 uppercase mr-2 tracking-wider">Reports:</span>
+                 {/* Line 2: Details */}
+                 <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
+                    <span className="flex items-center gap-1 bg-white px-2 py-1 rounded-md border border-gray-200 text-xs font-bold text-gray-600 shadow-sm">
+                        {getSourceIcon(activeBatch.source)} {activeBatch.source}
+                    </span>
+                    <span className="text-gray-500">Date: <span className="font-semibold text-gray-800">{new Date(activeBatch.date).toLocaleDateString()}</span></span>
+                    <div className="w-px h-4 bg-gray-200"></div>
+                    <span className="text-gray-500">Total: <span className="font-bold text-church-900">${activeBatch.totalAmount.toFixed(2)}</span></span>
+                 </div>
+
+                 {/* Line 3: Reports Row */}
+                 <div className="flex flex-wrap items-center gap-1.5 pt-3 border-t border-gray-200/50">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mr-1">Reports:</span>
                     <button 
                       onClick={() => navigate(`/reports/accounting/${activeBatch.id}`)}
-                      className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-400 text-gray-600 font-bold rounded-lg hover:bg-blue-50 hover:text-blue-700 hover:border-blue-400 transition-colors text-sm"
+                      className="flex items-center gap-1 px-2 py-1 bg-white border border-gray-300 text-gray-600 font-bold rounded-md hover:bg-blue-50 hover:text-blue-700 hover:border-blue-400 transition-colors text-xs shadow-sm"
                     >
-                      <FileSpreadsheet className="w-4 h-4" /> Accounting
+                      <FileSpreadsheet className="w-3.5 h-3.5" /> Accounting
                     </button>
                     <button 
                       onClick={() => navigate(`/reports/envelope/${activeBatch.id}`)}
-                      className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-400 text-gray-600 font-bold rounded-lg hover:bg-blue-50 hover:text-blue-700 hover:border-blue-400 transition-colors text-sm"
+                      className="flex items-center gap-1 px-2 py-1 bg-white border border-gray-300 text-gray-600 font-bold rounded-md hover:bg-blue-50 hover:text-blue-700 hover:border-blue-400 transition-colors text-xs shadow-sm"
                     >
-                      <Users className="w-4 h-4" /> Envelope
+                      <Users className="w-3.5 h-3.5" /> Envelope
                     </button>
                     {activeBatch.status === BatchStatus.Finalized && (
                       <button 
                         onClick={() => navigate(`/reports/deposit-slip/${activeBatch.id}`)}
-                        className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-400 text-gray-600 font-bold rounded-lg hover:bg-blue-50 hover:text-blue-700 hover:border-blue-400 transition-colors text-sm"
+                        className="flex items-center gap-1 px-2 py-1 bg-white border border-gray-300 text-gray-600 font-bold rounded-md hover:bg-blue-50 hover:text-blue-700 hover:border-blue-400 transition-colors text-xs shadow-sm"
                       >
-                        <ScrollText className="w-4 h-4" /> Deposit Slip
+                        <ScrollText className="w-3.5 h-3.5" /> Deposit Slip
                       </button>
+                    )}
+                    
+                    {activeBatch.status === BatchStatus.Finalized && (
+                       <button
+                         onClick={handleEmailAll}
+                         disabled={isEmailingAll}
+                         className="ml-auto flex items-center gap-1.5 px-3 py-1 bg-white border border-gray-300 text-church-600 hover:text-church-800 font-bold rounded-md disabled:opacity-50 transition-colors text-xs shadow-sm"
+                       >
+                         <Mail className="w-3.5 h-3.5" /> {isEmailingAll ? 'Sending...' : 'Email All Reports'}
+                       </button>
                     )}
                  </div>
                </div>
 
                {/* Audit Workspace */}
-               <div className="flex-1 overflow-y-auto p-6 space-y-6">
+               <div className="flex-1 overflow-y-auto p-4 space-y-4">
                  {activeBatch.status === BatchStatus.Finalized ? (
                    <div className="flex flex-col items-center justify-center h-full text-gray-400 space-y-4 py-12">
                      <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center">
@@ -375,12 +379,12 @@ const BatchHistory: React.FC = () => {
                  ) : (
                    <>
                      {/* Cash Audit Section */}
-                     <div className={`p-6 rounded-2xl border-2 transition-colors ${isCashBalanced ? 'bg-green-50/30 border-green-200' : 'bg-red-50/30 border-red-200'}`}>
-                        <div className="flex justify-between items-center mb-4">
-                          <h4 className="font-bold text-gray-700 flex items-center gap-2">
+                     <div className={`p-4 rounded-xl border-2 transition-colors ${isCashBalanced ? 'bg-green-50/30 border-green-200' : 'bg-red-50/30 border-red-200'}`}>
+                        <div className="flex justify-between items-center mb-3">
+                          <h4 className="text-lg font-bold text-gray-700 flex items-center gap-2">
                             <Banknote className="w-5 h-5 text-church-500" /> Cash Audit
                           </h4>
-                          <div className={`text-sm px-3 py-1 rounded-lg font-bold ${isCashBalanced ? 'text-green-700 bg-green-100' : 'text-red-600 bg-red-100'}`}>
+                          <div className={`text-base px-3 py-1 rounded-lg font-bold ${isCashBalanced ? 'text-green-700 bg-green-100' : 'text-red-600 bg-red-100'}`}>
                              {isCashBalanced 
                                ? 'Balanced' 
                                : (isCashTotalBalanced ? 'Count Mismatch' : `Variance: ${cashDiff > 0 ? '+' : ''}${cashDiff.toFixed(2)}`)
@@ -388,7 +392,7 @@ const BatchHistory: React.FC = () => {
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                        <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
                           {DENOMINATIONS.map(denom => {
                             const sysCount = systemDenomCounts[denom.toString()] || 0;
                             const userCount = cashCounts[denom.toString()] || 0;
@@ -396,88 +400,88 @@ const BatchHistory: React.FC = () => {
                             
                             return (
                               <div key={denom} className="relative">
-                                <label className="text-xs font-bold text-gray-400 block mb-1 text-center">${denom}</label>
+                                <label className="text-sm font-bold text-gray-400 block mb-0.5 text-center">${denom}</label>
                                 <input 
                                   type="number" 
                                   min="0"
                                   disabled={activeBatch.status === BatchStatus.Finalized}
-                                  className={`w-full p-2 rounded-lg border text-center outline-none focus:ring-2 focus:ring-church-500 font-bold ${match ? 'bg-white border-gray-400 text-gray-800' : 'bg-red-50 border-red-300 text-red-600'}`}
+                                  className={`w-full p-1 rounded-lg border text-base text-center outline-none focus:ring-2 focus:ring-church-500 font-bold ${match ? 'bg-white border-gray-400 text-gray-800' : 'bg-red-50 border-red-300 text-red-600'}`}
                                   value={cashCounts[denom.toString()] || ''}
                                   onChange={(e) => setCashCounts({...cashCounts, [denom.toString()]: parseInt(e.target.value) || 0})}
                                 />
                                 {/* Expected Count Indicator if mismatch and strictly auditing */}
                                 {(!match && activeBatch.status === BatchStatus.Open) && (
-                                  <div className="text-[10px] text-center text-gray-400 mt-1 font-medium">Exp: {sysCount}</div>
+                                  <div className="text-xs text-center text-gray-400 mt-1 font-bold">Exp: {sysCount}</div>
                                 )}
                               </div>
                             );
                           })}
                         </div>
                         
-                        <div className="flex justify-between items-center mt-4 pt-4 border-t border-gray-200/50">
-                           <div className="text-sm text-gray-500">System Recorded: <span className="font-bold">${systemCashTotal.toFixed(2)}</span></div>
-                           <div className="text-lg text-gray-800">Counted: <span className="font-bold">${countedCashTotal.toFixed(2)}</span></div>
+                        <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-200/50">
+                           <div className="text-base text-gray-500">System Recorded: <span className="font-bold">${systemCashTotal.toFixed(2)}</span></div>
+                           <div className="text-xl text-gray-800">Counted: <span className="font-bold">${countedCashTotal.toFixed(2)}</span></div>
                         </div>
                      </div>
 
                      {/* Check Audit Section */}
-                     <div className={`p-6 rounded-2xl border-2 transition-colors ${isCheckBalanced ? 'bg-green-50/30 border-green-200' : 'bg-red-50/30 border-red-200'}`}>
-                        <div className="flex justify-between items-center mb-4">
-                          <h4 className="font-bold text-gray-700 flex items-center gap-2">
+                     <div className={`p-4 rounded-xl border-2 transition-colors ${isCheckBalanced ? 'bg-green-50/30 border-green-200' : 'bg-red-50/30 border-red-200'}`}>
+                        <div className="flex justify-between items-center mb-3">
+                          <h4 className="text-lg font-bold text-gray-700 flex items-center gap-2">
                             <FileText className="w-5 h-5 text-church-500" /> Cheque Audit
                           </h4>
-                          <div className={`text-sm px-3 py-1 rounded-lg font-bold ${isCheckBalanced ? 'text-green-700 bg-green-100' : 'text-red-600 bg-red-100'}`}>
+                          <div className={`text-base px-3 py-1 rounded-lg font-bold ${isCheckBalanced ? 'text-green-700 bg-green-100' : 'text-red-600 bg-red-100'}`}>
                              {isCheckBalanced ? 'Balanced' : (!isCheckCountBalanced ? `Count Variance: ${checkCountDiff > 0 ? '+' : ''}${checkCountDiff}` : `Amount Variance: $${checkAmountDiff > 0 ? '+' : ''}${checkAmountDiff.toFixed(2)}`)}
                           </div>
                         </div>
 
                         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                           <table className="w-full text-left">
-                            <thead className="bg-gray-50 text-gray-500 text-sm">
+                            <thead className="bg-gray-50 text-gray-500 text-base font-medium">
                               <tr>
-                                <th className="p-3 pl-4 font-medium w-1/3">Type</th>
-                                <th className="p-3 font-medium w-1/3">Audit Total</th>
-                                <th className="p-3 pr-4 font-medium text-right w-1/3">System Total</th>
+                                <th className="p-2 pl-4 w-1/3">Type</th>
+                                <th className="p-2 w-1/3">Audit Total</th>
+                                <th className="p-2 pr-4 text-right w-1/3">System Total</th>
                               </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-100">
+                            <tbody className="divide-y divide-gray-100 text-base">
                               <tr className="hover:bg-gray-50/50 transition-colors">
-                                <td className="p-3 pl-4 font-medium text-gray-700">Physical Cheques</td>
-                                <td className="p-3">
+                                <td className="p-2 pl-4 font-bold text-gray-700">Physical Cheques</td>
+                                <td className="p-2">
                                   <input 
                                     type="number" 
                                     placeholder="Count..."
-                                    className="w-full max-w-[180px] p-2 rounded-lg border border-gray-400 font-bold bg-white focus:ring-2 focus:ring-church-500 outline-none"
+                                    className="w-full max-w-[180px] p-1.5 rounded-lg border border-gray-400 font-bold bg-white focus:ring-2 focus:ring-church-500 outline-none text-base"
                                     value={userCheckCount}
                                     onChange={(e) => setUserCheckCount(e.target.value)}
                                   />
                                 </td>
-                                <td className="p-3 pr-4 text-right text-xl font-bold text-gray-800">{systemCheckCount}</td>
+                                <td className="p-2 pr-4 text-right text-xl font-bold text-gray-800">{systemCheckCount}</td>
                               </tr>
                               <tr className="hover:bg-gray-50/50 transition-colors">
-                                <td className="p-3 pl-4 font-medium text-gray-700">Total Amount</td>
-                                <td className="p-3">
+                                <td className="p-2 pl-4 font-bold text-gray-700">Total Amount</td>
+                                <td className="p-2">
                                   <div className="relative max-w-[180px]">
-                                    <span className="absolute left-3 top-2.5 text-gray-400 font-bold">$</span>
+                                    <span className="absolute left-3 top-2 text-gray-400 font-bold">$</span>
                                     <input 
                                       type="number" 
                                       step="0.01"
                                       placeholder="0.00"
-                                      className="w-full pl-7 p-2 rounded-lg border border-gray-400 font-bold bg-white focus:ring-2 focus:ring-church-500 outline-none"
+                                      className="w-full pl-7 p-1.5 rounded-lg border border-gray-400 font-bold bg-white focus:ring-2 focus:ring-church-500 outline-none text-base"
                                       value={userCheckAmount}
                                       onChange={(e) => setUserCheckAmount(e.target.value)}
                                     />
                                   </div>
                                 </td>
-                                <td className="p-3 pr-4 text-right text-xl font-bold text-church-900">${systemCheckTotal.toFixed(2)}</td>
+                                <td className="p-2 pr-4 text-right text-xl font-bold text-church-900">${systemCheckTotal.toFixed(2)}</td>
                               </tr>
                             </tbody>
                           </table>
                         </div>
 
                         {/* Deposit Slip / Check List */}
-                        <div className="mt-6">
-                           <h5 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+                        <div className="mt-4">
+                           <h5 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1">
                              <ScrollText className="w-3 h-3" /> Deposit Summary (Cheques)
                            </h5>
                            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden max-h-40 overflow-y-auto">

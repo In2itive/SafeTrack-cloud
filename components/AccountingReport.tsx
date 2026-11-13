@@ -63,7 +63,8 @@ const AccountingReport = forwardRef<ReportRef, AccountingReportProps>(({ batchId
 
     try {
       const pdfBlob = await html2pdf().set(opt).from(element).output('blob');
-      const safeFilename = `Batch_${shortId(batch.id)}_Accounting.pdf`;
+      const timestamp = new Date().getTime();
+      const safeFilename = `Batch_${shortId(batch.id)}_Accounting_${timestamp}.pdf`;
       
       await sendEmailWithPDF(pdfBlob, safeFilename, 'accounting');
       if (!hiddenMode) alert('Email sent successfully!');
@@ -141,7 +142,7 @@ const AccountingReport = forwardRef<ReportRef, AccountingReportProps>(({ batchId
       )}
 
       {/* Report Paper */}
-      <div ref={reportRef} className="max-w-4xl mx-auto bg-white p-12 rounded-3xl shadow-xl print:shadow-none print:p-8 print:max-w-none">
+      <div ref={reportRef} className="max-w-4xl mx-auto bg-white p-6 rounded-3xl shadow-xl print:shadow-none print:p-0 print:max-w-none">
         
         {/* Header */}
         <div className="border-b-2 border-gray-800 pb-6 mb-8 print:pb-4 print:mb-6">
