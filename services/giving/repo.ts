@@ -12,7 +12,8 @@ function must<T>(res: { data: T; error: { message: string } | null }): T {
 const toRow = (g: GiftRecord) => ({
   external_id: g.externalId, gift_date: g.giftDate, amount: g.amount.toFixed(2), fee: g.fee.toFixed(2),
   currency: g.currency ?? null, payment_method: g.method, status: g.status,
-  payer_external_id: g.payerExternalId ?? null, payer_first_name: g.payerFirstName ?? null,
+  payer_external_id: g.payerExternalId ?? null, payer_envelope: g.payerEnvelope ?? null,
+  payer_first_name: g.payerFirstName ?? null,
   payer_last_name: g.payerLastName ?? null, payer_name: g.payerName ?? null, payer_email: g.payerEmail ?? null,
   payer_phone: g.payerPhone ?? null, payer_address: g.payerAddress ?? null, fund_key: g.fundKey ?? null,
   fund_name: g.fundName ?? null, memo: g.memo ?? null, deposit_ref: g.depositRef ?? null, raw: g.raw,
@@ -21,7 +22,8 @@ const toRow = (g: GiftRecord) => ({
 const fromRow = (r: ExternalTransactionRow): StagedGift => ({
   id: r.id, externalId: r.external_id, giftDate: r.gift_date, amount: Number(r.amount), fee: Number(r.fee),
   currency: r.currency ?? undefined, method: r.payment_method as StagedGift['method'], status: r.status,
-  payerExternalId: r.payer_external_id ?? undefined, payerFirstName: r.payer_first_name ?? undefined,
+  payerExternalId: r.payer_external_id ?? undefined, payerEnvelope: r.payer_envelope ?? undefined,
+  payerFirstName: r.payer_first_name ?? undefined,
   payerLastName: r.payer_last_name ?? undefined, payerName: r.payer_name ?? undefined,
   payerEmail: r.payer_email ?? undefined, payerPhone: r.payer_phone ?? undefined,
   payerAddress: r.payer_address ?? undefined, fundKey: r.fund_key ?? undefined, fundName: r.fund_name ?? undefined,

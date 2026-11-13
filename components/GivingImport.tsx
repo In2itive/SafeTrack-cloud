@@ -11,7 +11,7 @@ import { UserRole, type Giver } from '../types';
 import { PROVIDERS } from '../services/giving/providers';
 import { parseCsv } from '../services/giving/parse';
 import {
-  buildIndexes, fundKeyOf, payerLabel, suggestFund, suggestGiver, type FundReason, type GiverReason, type MatchContext,
+  buildIndexes, fundKeyOf, hasPayerIdentity, payerLabel, suggestFund, suggestGiver, type FundReason, type GiverReason, type MatchContext,
 } from '../services/giving/matching';
 import {
   listFundMap, listGiverLinks, listQueue, postGifts, setIgnored, stageGifts,
@@ -147,10 +147,11 @@ const GivingImport: React.FC = () => {
     return [...m.values()].sort((a, b) => b.total - a.total);
   }, [active, ctx, fundChoice]);
 
+  // Payers we could add as new givers (they have a name or email to go on)
   const unmatchedPayers = useMemo(() => {
     const m = new Map<string, Row[]>();
     for (const r of active) {
-      if (r.giverIdEff || r.status !== 'succeeded' || r.candidates?.length) continue;
+      if (r.giverIdEff || r.status !== 'succeeded' || r.candidates?.length || !hasPayerIdentity(r)) continue;
       const k = r.payerExternalId || r.payerEmail || payerLabel(r).toLowerCase();
       if (!m.has(k)) m.set(k, []);
       m.get(k)!.push(r);
@@ -200,6 +201,9 @@ const GivingImport: React.FC = () => {
     const g = await addGiver({
       name: payerLabel(r), email: r.payerEmail, pushPayId: providerId === 'pushpay' ? r.payerExternalId : undefined,
       address1: r.payerAddress,
+      // Keep the provider's envelope number when it's free and not reserved
+      ...(r.payerEnvelope !== undefined && r.payerEnvelope >= 2 && !(givers ?? []).some(x => x.envelopeNumber === r.payerEnvelope)
+        ? { envelopeNumber: r.payerEnvelope } : {}),
     } as Omit<Giver, 'id'>);
     setGiverChoice(c => ({ ...c, ...Object.fromEntries(rs.map(x => [x.id, g.id!])) }));
     return g;
@@ -457,7 +461,11 @@ const GivingImport: React.FC = () => {
                       <td className="p-2 text-gray-600">{formatDate(r.giftDate)}</td>
                       <td className="p-2">
                         <div className="font-medium text-gray-800">{payerLabel(r)}</div>
-                        <div className="text-xs text-gray-400">{[r.payerEmail, r.externalId].filter(Boolean).join(' · ')}</div>
+                        <div className="text-xs text-gray-400">{[
+                          r.payerEnvelope !== undefined && hasPayerIdentity(r) ? `Env #${r.payerEnvelope}` : '',
+                          r.payerEmail, r.payerEnvelope !== undefined && !giverById.has(r.giverIdEff ?? '') && !hasPayerIdentity(r) ? 'not in registry' : '',
+                          r.externalId.startsWith('H') && /^H[0-9a-f]{8}-\d+$/.test(r.externalId) ? '' : r.externalId,
+                        ].filter(Boolean).join(' · ')}</div>
                         {r.status !== 'succeeded' && <span className="text-[10px] uppercase font-semibold text-amber-700">{r.status}</span>}
                       </td>
                       <td className="p-2 text-gray-600 hidden lg:table-cell">{r.fundName || r.fundKey || '—'}</td>

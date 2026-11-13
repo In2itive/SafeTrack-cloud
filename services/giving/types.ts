@@ -31,6 +31,7 @@ export interface GiftRecord {
   method: ElectronicMethod;
   status: GiftStatus;
   payerExternalId?: string;
+  payerEnvelope?: number;    // church envelope number, when the provider exports it
   payerFirstName?: string;
   payerLastName?: string;
   payerName?: string;

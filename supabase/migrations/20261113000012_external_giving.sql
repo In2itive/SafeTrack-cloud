@@ -40,6 +40,7 @@ create table public.external_transactions (
   payment_method     public.payment_method not null,
   status             text not null check (status in ('succeeded', 'pending', 'failed', 'refunded')),
   payer_external_id  text,
+  payer_envelope     integer,       -- the church's envelope number, when the provider has it
   payer_first_name   text,
   payer_last_name    text,
   payer_name         text,
@@ -183,7 +184,7 @@ create trigger external_transactions_audit after update or delete on public.exte
 --   * public.stage_external_transactions_server()   service role only, for a
 --     webhook such as a future Stripe module
 -- Row shape (snake_case): external_id, gift_date, amount, fee, currency,
--- payment_method, status, payer_external_id, payer_first_name,
+-- payment_method, status, payer_external_id, payer_envelope, payer_first_name,
 -- payer_last_name, payer_name, payer_email, payer_phone, payer_address,
 -- fund_key, fund_name, memo, deposit_ref, raw
 -- ---------------------------------------------------------------------------
@@ -212,7 +213,7 @@ begin
   truncate pg_temp.ext_in;
 
   insert into pg_temp.ext_in (id, church_id, provider, external_id, gift_date, amount, fee, currency,
-                              payment_method, status, payer_external_id, payer_first_name, payer_last_name,
+                              payment_method, status, payer_external_id, payer_envelope, payer_first_name, payer_last_name,
                               payer_name, payer_email, payer_phone, payer_address, fund_key, fund_name,
                               memo, deposit_ref, raw)
   select distinct on (trim(r ->> 'external_id'))
@@ -220,7 +221,8 @@ begin
          (r ->> 'gift_date')::date, (r ->> 'amount')::numeric, coalesce(nullif(r ->> 'fee', '')::numeric, 0),
          nullif(r ->> 'currency', ''),
          (r ->> 'payment_method')::public.payment_method, r ->> 'status',
-         nullif(trim(r ->> 'payer_external_id'), ''), nullif(trim(r ->> 'payer_first_name'), ''),
+         nullif(trim(r ->> 'payer_external_id'), ''), nullif(trim(r ->> 'payer_envelope'), '')::integer,
+         nullif(trim(r ->> 'payer_first_name'), ''),
          nullif(trim(r ->> 'payer_last_name'), ''), nullif(trim(r ->> 'payer_name'), ''),
          nullif(lower(trim(r ->> 'payer_email')), ''), nullif(trim(r ->> 'payer_phone'), ''),
          nullif(trim(r ->> 'payer_address'), ''), nullif(trim(r ->> 'fund_key'), ''),
@@ -247,7 +249,7 @@ begin
     update public.external_transactions t set
       gift_date = i.gift_date, amount = i.amount, fee = i.fee, currency = i.currency,
       payment_method = i.payment_method, status = i.status,
-      payer_external_id = i.payer_external_id, payer_first_name = i.payer_first_name,
+      payer_external_id = i.payer_external_id, payer_envelope = i.payer_envelope, payer_first_name = i.payer_first_name,
       payer_last_name = i.payer_last_name, payer_name = i.payer_name, payer_email = i.payer_email,
       payer_phone = i.payer_phone, payer_address = i.payer_address, fund_key = i.fund_key,
       fund_name = i.fund_name, memo = i.memo, deposit_ref = i.deposit_ref, raw = i.raw
@@ -262,10 +264,10 @@ begin
   with ins as (
     insert into public.external_transactions
       (church_id, provider, external_id, gift_date, amount, fee, currency, payment_method, status,
-       payer_external_id, payer_first_name, payer_last_name, payer_name, payer_email, payer_phone,
+       payer_external_id, payer_envelope, payer_first_name, payer_last_name, payer_name, payer_email, payer_phone,
        payer_address, fund_key, fund_name, memo, deposit_ref, raw)
     select church_id, provider, external_id, gift_date, amount, fee, currency, payment_method, status,
-           payer_external_id, payer_first_name, payer_last_name, payer_name, payer_email, payer_phone,
+           payer_external_id, payer_envelope, payer_first_name, payer_last_name, payer_name, payer_email, payer_phone,
            payer_address, fund_key, fund_name, memo, deposit_ref, raw
     from pg_temp.ext_in
     on conflict (church_id, provider, external_id) do nothing

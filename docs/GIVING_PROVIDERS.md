@@ -27,7 +27,7 @@ controls.
 | Remembered provider fund → SafeTrack fund | `external_fund_map` |
 | Staging entry points | `stage_external_transactions` (browser: admin/treasurer only) and `stage_external_transactions_server` (service role, for webhooks) |
 | Posting: one atomic batch per group, giver/fund choices applied in the same transaction | `post_external_batch` |
-| Matching order: remembered link → provider ID on giver → email → unique name | `services/giving/matching.ts` |
+| Matching order: envelope # → remembered link → provider ID on giver → email → unique name | `services/giving/matching.ts` |
 | Import / review UI | `components/GivingImport.tsx` (route `#/online-giving`) |
 | Reconciliation panel (gross, fees, expected deposit, refunds) | `components/BatchHistory.tsx` |
 
@@ -45,7 +45,10 @@ Payment methods added: `card`, `bank_debit`, `online`. Batch source added: `stri
 
 ## Pushpay adapter
 
-`services/giving/providers/pushpay.ts`. Export from Pushpay with: Transactions → set the period → Apply Filter → Export → **to CSV (Legacy)**.
+`services/giving/providers/pushpay.ts`. Two export styles are supported:
+
+- **Envelope report** (`Envelope #, Amount, Date, Fund, Ignore`). Gifts match the Giver Registry directly by envelope number. `Ignore` is read as Pushpay's giver ID and remembered. If the file shows that column changing from gift to gift for the same envelope, it's used as the gift ID instead. This report has no fees, so the expected deposit equals the gross amount.
+- **Transactions export**: Transactions → set the period → Apply Filter → Export → **to CSV (Legacy)**.
 
 Pushpay doesn't publish a fixed column list, so the adapter:
 

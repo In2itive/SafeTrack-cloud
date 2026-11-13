@@ -1,12 +1,12 @@
 /**
  * Suggest a giver and a fund for each staged gift. Provider-agnostic.
- * Order of trust: remembered link → provider ID on the giver → email → name.
+ * Order of trust: envelope # → remembered link → provider ID on the giver → email → name.
  * A suggestion is only made when exactly one giver fits.
  */
 import type { FundEntity, Giver } from '../../types';
 import type { GiftRecord } from './types';
 
-export type GiverReason = 'remembered' | 'provider id' | 'email' | 'name';
+export type GiverReason = 'envelope' | 'remembered' | 'provider id' | 'email' | 'name';
 export type FundReason = 'remembered' | 'name' | 'guess';
 
 export interface GiverSuggestion { giverId?: string; reason?: GiverReason; candidates?: string[] }
@@ -48,6 +48,7 @@ export function buildIndexes(ctx: MatchContext) {
   const byEmail = new Map<string, Set<string>>();
   const byName = new Map<string, Set<string>>();
   const byProviderId = new Map<string, Set<string>>();
+  const byEnvelope = new Map<number, string>();
   const put = (m: Map<string, Set<string>>, k: string | undefined, id: string) => {
     const key = k?.trim().toLowerCase();
     if (!key) return;
@@ -56,14 +57,19 @@ export function buildIndexes(ctx: MatchContext) {
   };
   for (const g of ctx.givers) {
     if (!g.id) continue;
+    byEnvelope.set(g.envelopeNumber, g.id);
     [g.email, g.email2, g.eTransferId, g.eTransferId2].forEach(e => { if (e?.includes('@')) put(byEmail, e, g.id!); });
     put(byProviderId, g.pushPayId, g.id);
     [...nameKeys(g.name), ...nameKeys(g.name2)].forEach(k => put(byName, k, g.id!));
   }
-  return { byEmail, byName, byProviderId };
+  return { byEmail, byName, byProviderId, byEnvelope };
 }
 
 export function suggestGiver(gift: GiftRecord, ctx: MatchContext, idx: ReturnType<typeof buildIndexes>): GiverSuggestion {
+  if (gift.payerEnvelope !== undefined) {
+    const byEnv = idx.byEnvelope.get(gift.payerEnvelope);
+    if (byEnv) return { giverId: byEnv, reason: 'envelope' };
+  }
   if (gift.payerExternalId) {
     const linked = ctx.giverLinks.get(gift.payerExternalId);
     if (linked && ctx.givers.some(g => g.id === linked)) return { giverId: linked, reason: 'remembered' };
@@ -107,5 +113,10 @@ export function suggestFund(gift: GiftRecord, ctx: MatchContext): FundSuggestion
 }
 
 /** "Mary Jones" from whatever payer fields the provider sent. */
-export const payerLabel = (g: Pick<GiftRecord, 'payerName' | 'payerFirstName' | 'payerLastName' | 'payerEmail' | 'payerExternalId'>) =>
-  g.payerName || [g.payerFirstName, g.payerLastName].filter(Boolean).join(' ') || g.payerEmail || g.payerExternalId || 'Unknown payer';
+export const payerLabel = (g: Pick<GiftRecord, 'payerName' | 'payerFirstName' | 'payerLastName' | 'payerEmail' | 'payerExternalId' | 'payerEnvelope'>) =>
+  g.payerName || [g.payerFirstName, g.payerLastName].filter(Boolean).join(' ') || g.payerEmail
+  || (g.payerEnvelope !== undefined ? `Envelope #${g.payerEnvelope}` : '') || g.payerExternalId || 'Unknown payer';
+
+/** True when the provider gave us something a person could be identified by. */
+export const hasPayerIdentity = (g: Pick<GiftRecord, 'payerName' | 'payerFirstName' | 'payerLastName' | 'payerEmail'>) =>
+  !!(g.payerName || g.payerFirstName || g.payerLastName || g.payerEmail);

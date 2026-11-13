@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { parseAmount, parseCsv, parseDate, detectDateOrder } from '../../services/giving/parse';
 import { pushpayProvider, classifyMethod, classifyStatus } from '../../services/giving/providers/pushpay';
-import { buildIndexes, nameKeys, suggestFund, suggestGiver, type MatchContext } from '../../services/giving/matching';
+import { buildIndexes, nameKeys, payerLabel, suggestFund, suggestGiver, type MatchContext } from '../../services/giving/matching';
 
 let passed = 0;
 const test = (name: string, fn: () => void) => { fn(); passed++; console.log(`ok  ${name}`); };
@@ -144,6 +144,45 @@ test('matching: remembered link > provider id > email > unique name; ambiguous n
   assert.deepEqual(suggestFund(mary, ctx), { fundId: 'f-gen', reason: 'guess' });
   assert.deepEqual(suggestFund(sam, ctx), { fundId: 'f-mis', reason: 'name' });
   assert.deepEqual(suggestFund(ann, ctx), { fundId: 'f-mis', reason: 'remembered' });
+});
+
+const envCsv = parseCsv(readFileSync(new URL('../fixtures/pushpay-envelope.csv', import.meta.url), 'utf8'));
+const envMap = pushpayProvider.detectMapping(envCsv.headers);
+const envResult = pushpayProvider.parse(envCsv, envMap, { dateOrder: 'auto' });
+
+test('Pushpay envelope report: Envelope #, Amount, Date, Fund, Ignore', () => {
+  assert.deepEqual(Object.keys(envMap).filter(k => envMap[k] !== undefined).sort(), ['amount', 'date', 'envelope', 'fundName', 'payerId']);
+  assert.equal(pushpayProvider.missingFields(envMap).length, 0);
+  assert.equal(envResult.gifts.length, 5);
+  assert.deepEqual(envResult.gifts.map(g => g.payerEnvelope), [100, 101, 100, undefined, 999]);
+  assert.equal(envResult.gifts[0].payerExternalId, '8F3K2A');   // same ID for both of envelope 100's gifts -> a giver ID
+  assert.equal(envResult.gifts[3].payerExternalId, 'M2N4BX');
+  assert.ok(envResult.gifts.every(g => g.method === 'online' && g.status === 'succeeded' && g.fee === 0));
+  assert.equal(new Set(envResult.gifts.map(g => g.externalId)).size, 5);
+});
+
+test('Pushpay envelope report: "Ignore" that differs per gift becomes the gift ID', () => {
+  const t = parseCsv('Envelope #,Amount,Date,Fund,Ignore\n100,250,11/01/2026,General,TX-1\n100,25,11/08/2026,General,TX-2\n');
+  const r = pushpayProvider.parse(t, pushpayProvider.detectMapping(t.headers), { dateOrder: 'auto' });
+  assert.deepEqual(r.gifts.map(g => g.externalId), ['TX-1', 'TX-2']);
+  assert.equal(r.gifts[0].payerExternalId, undefined);
+  assert.ok(r.warnings.some(w => w.includes('gift ID')));
+});
+
+test('matching: envelope # wins, unknown envelopes stay unmatched', () => {
+  const ctx: MatchContext = {
+    givers: [
+      { id: 'g100', envelopeNumber: 100, name: 'Mary Jones' },
+      { id: 'g101', envelopeNumber: 101, name: 'Sam Lee' },
+    ],
+    giverLinks: new Map([['M2N4BX', 'g101']]),
+    funds: [{ id: 'f-gen', name: 'General', isSystem: true, isActive: true }],
+    fundMap: new Map(),
+  };
+  const idx = buildIndexes(ctx);
+  const s = envResult.gifts.map(g => suggestGiver(g, ctx, idx));
+  assert.deepEqual(s.map(x => `${x.giverId ?? '-'}:${x.reason ?? '-'}`), ['g100:envelope', 'g101:envelope', 'g100:envelope', 'g101:remembered', '-:-']);
+  assert.equal(payerLabel(envResult.gifts[4]), 'Envelope #999');
 });
 
 console.log(`\n${passed} unit tests passed`);

@@ -47,7 +47,7 @@ insert into public.church_members (church_id, user_id, role, display_name) value
   (:'church_e', '00000000-0000-0000-0000-0000000000e2', 'teller', 'Ted Teller'),
   (:'church_e', '00000000-0000-0000-0000-0000000000e3', 'treasurer', 'Tara Treasurer');
 
-\set rows '[{"external_id":"PP-1","gift_date":"2026-11-08","amount":"100.00","fee":"2.50","payment_method":"card","status":"succeeded","payer_external_id":"P-77","payer_first_name":"Mary","payer_last_name":"Jones","payer_email":"Mary@Example.com","fund_key":"Tithes","fund_name":"Tithes","raw":{"a":1}},{"external_id":"PP-2","gift_date":"2026-11-08","amount":"50","fee":"0.50","payment_method":"bank_debit","status":"succeeded","payer_first_name":"Sam","payer_last_name":"Lee","fund_name":"Missions"},{"external_id":"PP-3","gift_date":"2026-11-09","amount":"20","payment_method":"card","status":"failed","payer_first_name":"Al","payer_last_name":"Fail","fund_name":"Tithes"},{"external_id":"PP-1","gift_date":"2026-11-08","amount":"100.00","fee":"2.50","payment_method":"card","status":"succeeded","payer_first_name":"Mary","payer_last_name":"Jones","fund_name":"Tithes"}]'
+\set rows '[{"external_id":"PP-1","gift_date":"2026-11-08","amount":"100.00","fee":"2.50","payment_method":"card","status":"succeeded","payer_external_id":"P-77","payer_envelope":"100","payer_first_name":"Mary","payer_last_name":"Jones","payer_email":"Mary@Example.com","fund_key":"Tithes","fund_name":"Tithes","raw":{"a":1}},{"external_id":"PP-2","gift_date":"2026-11-08","amount":"50","fee":"0.50","payment_method":"bank_debit","status":"succeeded","payer_first_name":"Sam","payer_last_name":"Lee","fund_name":"Missions"},{"external_id":"PP-3","gift_date":"2026-11-09","amount":"20","payment_method":"card","status":"failed","payer_first_name":"Al","payer_last_name":"Fail","fund_name":"Tithes"},{"external_id":"PP-1","gift_date":"2026-11-08","amount":"100.00","fee":"2.50","payment_method":"card","status":"succeeded","payer_first_name":"Mary","payer_last_name":"Jones","fund_name":"Tithes"}]'
 
 -- ---------- permissions ----------
 set role authenticated;
@@ -68,6 +68,8 @@ select pg_temp.expect_eq((select public.stage_external_transactions(:'church_e',
   're-importing the same file adds nothing');
 select pg_temp.expect_eq((select payer_email from public.external_transactions where church_id = :'church_e' and external_id = 'PP-1'),
   'mary@example.com', 'email normalised to lower case');
+select pg_temp.expect_eq((select payer_envelope::text from public.external_transactions where church_id = :'church_e' and external_id = 'PP-1'),
+  '100', 'envelope number staged');
 select pg_temp.expect_error(array[format('select public.stage_external_transactions(%L, ''in_person'', %L)', :'church_e', :'rows')],
   'not an external provider', 'in_person is not a provider');
 select pg_temp.expect_error(array[format(

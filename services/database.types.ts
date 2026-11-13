@@ -62,7 +62,7 @@ export type GiftStatusDb = 'succeeded' | 'pending' | 'failed' | 'refunded';
 export interface ExternalTransactionRow {
   id: string; church_id: string; provider: BatchSourceDb; external_id: string; gift_date: string;
   amount: number; fee: number; currency: string | null; payment_method: PaymentMethodDb; status: GiftStatusDb;
-  payer_external_id: string | null; payer_first_name: string | null; payer_last_name: string | null;
+  payer_external_id: string | null; payer_envelope: number | null; payer_first_name: string | null; payer_last_name: string | null;
   payer_name: string | null; payer_email: string | null; payer_phone: string | null; payer_address: string | null;
   fund_key: string | null; fund_name: string | null; memo: string | null; deposit_ref: string | null; raw: Json;
   giver_id: string | null; fund_id: string | null; ignored: boolean; donation_id: string | null;

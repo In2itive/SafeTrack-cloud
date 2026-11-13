@@ -1,5 +1,6 @@
 /**
- * Pushpay adapter: Transactions → Export → "to CSV (Legacy)".
+ * Pushpay adapter: Transactions → Export → "to CSV (Legacy)", or a church's
+ * envelope-style report (Envelope #, Amount, Date, Fund, Ignore).
  *
  * Pushpay doesn't publish a fixed column list, and labels differ between
  * accounts and export versions, so columns are recognised by name (aliases
@@ -28,8 +29,11 @@ const FIELDS: FieldDef[] = [
   { key: 'status', label: 'Status', aliases: ['status', 'payment status', 'transaction status', 'state'] },
   { key: 'source', label: 'Payment source', aliases: ['payment source', 'transaction source', 'source', 'channel'] },
   { key: 'refund', label: 'Refund', aliases: ['refund', 'refunded', 'refund type', 'refund status'] },
+  { key: 'envelope', label: 'Envelope #', aliases: ['envelope #', 'envelope', 'envelope number', 'envelope no', 'envelope no.', 'env #', 'env', 'env no'],
+    hint: 'Matches gifts straight to the Giver Registry.' },
   { key: 'payerId', label: 'Payer ID', aliases: ['payer id', 'person id', 'payer reference', 'member id', 'customer id', 'pushpay payer id',
-      'payer key', 'giver id', 'donor id', 'individual id', 'pushpay id'] },
+      'payer key', 'giver id', 'donor id', 'individual id', 'pushpay id', 'ignore'],
+    hint: 'A Pushpay ID that stays the same for each giver. If it turns out to be different on every gift, it is used as the gift ID instead.' },
   { key: 'firstName', label: 'First name', aliases: ['first name', 'payer first name', "payer's first name", 'firstname', 'given name'] },
   { key: 'lastName', label: 'Last name', aliases: ['last name', 'payer last name', "payer's last name", 'lastname', 'surname', 'family name'] },
   { key: 'payerName', label: 'Payer name', aliases: ['payer name', 'name', 'full name', 'payer full name', 'payer', 'giver name', 'giver', 'donor name', 'donor'] },
@@ -64,8 +68,8 @@ export function detectMapping(headers: string[]): ColumnMapping {
 
 function missingFields(mapping: ColumnMapping): FieldDef[] {
   const missing = FIELDS.filter(f => f.required && mapping[f.key] === undefined);
-  const hasPayer = ['payerName', 'firstName', 'lastName', 'email', 'payerId'].some(k => mapping[k] !== undefined);
-  if (!hasPayer) missing.push({ key: 'payerName', label: 'Payer name (or first/last name, email or payer ID)', aliases: [] });
+  const hasPayer = ['envelope', 'payerName', 'firstName', 'lastName', 'email', 'payerId'].some(k => mapping[k] !== undefined);
+  if (!hasPayer) missing.push({ key: 'payerName', label: 'Envelope #, payer name, email or payer ID', aliases: [] });
   return missing;
 }
 
@@ -92,7 +96,8 @@ export function classifyStatus(v: string): GiftStatus {
 
 const truthy = (v: string) => !!v.trim() && !/^(no|false|0|n|none|-)$/i.test(v.trim());
 
-function parse(table: CsvTable, mapping: ColumnMapping, options: ParseOptions): ParseResult {
+function parse(table: CsvTable, mappingIn: ColumnMapping, options: ParseOptions): ParseResult {
+  let mapping = mappingIn;
   const gifts: GiftRecord[] = [];
   const skipped: SkippedRow[] = [];
   const warnings: string[] = [];
@@ -109,6 +114,22 @@ function parse(table: CsvTable, mapping: ColumnMapping, options: ParseOptions): 
     const short = table.rows.map(r => at(r, 'date').match(/^(\d{1,2})[/.-](\d{1,2})[/.-]/)).filter(Boolean) as RegExpMatchArray[];
     if (short.length > 0 && !short.some(m => +m[2] > 12))
       warnings.push('Dates were read as month/day/year. Change "Date order" if that is wrong.');
+  }
+  // Is the "payer ID" column really per gift? If one giver (same envelope or name)
+  // shows up with different IDs, it's a transaction ID: use it to identify gifts.
+  if (mapping.payerId !== undefined && mapping.externalId === undefined) {
+    const idsByPayer = new Map<string, Set<string>>();
+    for (const r of table.rows) {
+      const who = at(r, 'envelope') || (at(r, 'payerName') || `${at(r, 'firstName')} ${at(r, 'lastName')}`).trim().toLowerCase() || at(r, 'email').toLowerCase();
+      const id = at(r, 'payerId');
+      if (!who || !id) continue;
+      if (!idsByPayer.has(who)) idsByPayer.set(who, new Set());
+      idsByPayer.get(who)!.add(id);
+    }
+    if ([...idsByPayer.values()].some(ids => ids.size > 1)) {
+      mapping = { ...mapping, externalId: mapping.payerId, payerId: undefined };
+      warnings.push(`The "${table.headers[mapping.externalId!]}" column changes from gift to gift for the same giver, so it is used as the gift ID (not a giver ID).`);
+    }
   }
   if (mapping.externalId === undefined)
     warnings.push('No Payment ID column: gifts are identified by their contents. Re-importing the same file is still safe, but identical gifts on the same day from the same person can only be told apart by their order in the file.');
@@ -149,14 +170,18 @@ function parse(table: CsvTable, mapping: ColumnMapping, options: ParseOptions): 
     }
 
     const email = at(row, 'email').toLowerCase();
-    if (!payerName && !email && !at(row, 'payerId')) return skip('No payer name, email or ID');
+    const envText = at(row, 'envelope').replace(/^#/, '');
+    const envelope = /^\d+$/.test(envText) ? parseInt(envText, 10) : undefined;
+    if (envText && envelope === undefined) return skip(`Envelope "${at(row, 'envelope')}" is not a number`);
+    if (!payerName && !email && !at(row, 'payerId') && envelope === undefined) return skip('No envelope, payer name, email or ID');
 
     const fundCode = at(row, 'fundCode');
     const fundName = at(row, 'fundName');
 
     let externalId = at(row, 'externalId');
     if (!externalId) {
-      const key = [giftDate, amount.toFixed(2), payerName.toLowerCase(), email, fundCode || fundName, methodText, at(row, 'memo')].join('|');
+      const key = [giftDate, amount.toFixed(2), envelope ?? '', at(row, 'payerId'), payerName.toLowerCase(), email,
+        fundCode || fundName, methodText, at(row, 'memo')].join('|');
       const n = (occurrences.get(key) ?? 0) + 1;
       occurrences.set(key, n);
       externalId = `H${hashString(key)}-${n}`;
@@ -170,7 +195,7 @@ function parse(table: CsvTable, mapping: ColumnMapping, options: ParseOptions): 
 
     gifts.push({
       externalId, giftDate, amount, fee, currency: at(row, 'currency') || undefined, method, status,
-      payerExternalId: at(row, 'payerId') || undefined,
+      payerExternalId: at(row, 'payerId') || undefined, payerEnvelope: envelope,
       payerFirstName: first || undefined, payerLastName: last || undefined, payerName: payerName || undefined,
       payerEmail: email || undefined, payerPhone: at(row, 'phone') || undefined, payerAddress: address || undefined,
       fundKey: fundCode || fundName || undefined, fundName: fundName || fundCode || undefined,
