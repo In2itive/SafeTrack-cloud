@@ -15,3 +15,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run build
+      - name: Filenames must be valid on Windows
+        run: |
+          bad=$(git ls-files | grep -E '[<>:"|?*\\]|[ .]$|(^|/)(CON|PRN|AUX|NUL|COM[0-9]|LPT[0-9])(\.|/|$)' || true)
+          if [ -n "$bad" ]; then echo "::error::Windows-invalid file names (breaks git clone on Windows):"; echo "$bad"; exit 1; fi
