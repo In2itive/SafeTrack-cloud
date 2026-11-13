@@ -33,9 +33,10 @@ interface Row extends StagedGift {
   ready: boolean;
 }
 
-const ReasonBadge: React.FC<{ reason?: string }> = ({ reason }) => {
+/** Green = reliable match; amber = check it (a guess, or a giver matched on name only). */
+const ReasonBadge: React.FC<{ reason?: string; weak?: boolean }> = ({ reason, weak }) => {
   if (!reason) return null;
-  const style = reason === 'guess' || reason === 'name'
+  const style = weak
     ? 'bg-amber-50 text-amber-700 border-amber-200'
     : 'bg-green-50 text-green-700 border-green-200';
   return <span className={`ml-1 px-1.5 py-0.5 rounded border text-[10px] uppercase tracking-wide ${style}`}>{reason}</span>;
@@ -280,9 +281,9 @@ const GivingImport: React.FC = () => {
           <div className="flex flex-col md:flex-row gap-6">
             <div className="md:w-1/3">
               <h3 className="font-bold text-gray-800 mb-2">1. Upload a {fp.label} export</h3>
-              <ol className="text-sm text-gray-600 list-decimal ml-5 space-y-1">
+              <ul className="text-sm text-gray-600 list-disc ml-5 space-y-1">
                 {fp.exportSteps.map(s => <li key={s}>{s}</li>)}
-              </ol>
+              </ul>
               <p className="text-xs text-gray-400 mt-3">Overlapping date ranges are fine — gifts already brought in are recognised and skipped.</p>
             </div>
             <div className="flex-1">
@@ -410,7 +411,7 @@ const GivingImport: React.FC = () => {
                       <option value="">Choose fund…</option>
                       {(funds ?? []).map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
                     </select>
-                    <ReasonBadge reason={f.fundId ? f.reason : undefined} />
+                    <ReasonBadge reason={f.fundId ? f.reason : undefined} weak={f.reason === 'guess'} />
                   </div>
                 </div>
               ))}
@@ -487,7 +488,7 @@ const GivingImport: React.FC = () => {
                               {giverOptions.map(x => <option key={x.id} value={x.id}>{x.name} (#{x.envelopeNumber})</option>)}
                             </optgroup>
                           </select>
-                          {r.giverIdEff ? <ReasonBadge reason={r.giverReason} /> : canManage && (
+                          {r.giverIdEff ? <ReasonBadge reason={r.giverReason} weak={r.giverReason === 'name'} /> : canManage && (
                             <button title="Add as a new giver" onClick={() => run(async () => { await createGiver([r]); })}
                               className="p-1 rounded text-blue-600 hover:bg-blue-50"><UserPlus className="w-4 h-4" /></button>
                           )}
