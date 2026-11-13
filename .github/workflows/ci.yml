@@ -16,6 +16,8 @@ jobs:
       - run: npm run typecheck
       - run: npm run test:unit
       - name: Type-check Edge Functions under Deno
+        env:
+          DENO_NO_PACKAGE_JSON: '1'   # functions resolve their own imports, not the app's node_modules
         run: |
           for fn in supabase/functions/*/; do
             name=$(basename "$fn"); [ "${name#_}" = "$name" ] || continue
