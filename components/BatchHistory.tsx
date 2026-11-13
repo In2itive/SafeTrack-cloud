@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { formatDate } from '../utils/date';
-import { useLive, listBatches, listDonations, finalizeBatch, unlockBatch, deleteBatch, signAsSecondTeller, shortId } from '../services/repo';
+import { useLive, listBatches, listDonations, getGivers, finalizeBatch, unlockBatch, deleteBatch, signAsSecondTeller, shortId } from '../services/repo';
 import { BatchStatus, PaymentMethod, BatchSource, UserRole } from '../types';
 import { FileText, Lock, CheckCircle, Banknote, ScrollText, Unlock, AlertTriangle, X, ShieldAlert, Edit, Smartphone, CreditCard, Users, FileSpreadsheet, Trash2, Mail } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -30,6 +30,12 @@ const BatchHistory: React.FC = () => {
 
   // Fetch donations for the active batch for audit calculations
   const donations = useLive(() => selectedBatchId ? listDonations(selectedBatchId) : Promise.resolve([]), [selectedBatchId]);
+  const giverKey = [...new Set((donations ?? []).map(d => d.giverId))].sort().join(',');
+  const giverList = useLive(() => giverKey ? getGivers(giverKey.split(',')) : Promise.resolve([]), [giverKey]);
+  const giverLabel = (id: string) => {
+    const g = giverList?.find(x => x.id === id);
+    return g ? `${g.name}${g.envelopeNumber > 1 ? ` (#${g.envelopeNumber})` : ''}` : '…';
+  };
 
   const activeBatch = batches?.find(b => b.id === selectedBatchId);
 
@@ -490,7 +496,7 @@ const BatchHistory: React.FC = () => {
                                <thead className="bg-gray-50 text-gray-500">
                                  <tr>
                                    <th className="p-2 pl-4">Cheque #</th>
-                                   <th className="p-2">Giver ID</th>
+                                   <th className="p-2">Giver</th>
                                    <th className="p-2 text-right pr-4">Amount</th>
                                  </tr>
                                </thead>
@@ -498,7 +504,7 @@ const BatchHistory: React.FC = () => {
                                  {systemCheckDonations.map(d => (
                                    <tr key={d.id} className="border-b border-gray-50 last:border-0 hover:bg-blue-50">
                                      <td className="p-2 pl-4 font-mono text-gray-600">{d.chequeNumber || '-'}</td>
-                                     <td className="p-2 text-gray-500">#{d.giverId}</td>
+                                     <td className="p-2 text-gray-500">{giverLabel(d.giverId)}</td>
                                      <td className="p-2 text-right pr-4 font-medium">${d.amount.toFixed(2)}</td>
                                    </tr>
                                  ))}
