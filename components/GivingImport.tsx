@@ -14,8 +14,10 @@ import {
   buildIndexes, fundKeyOf, hasPayerIdentity, payerLabel, suggestFund, suggestGiver, type FundReason, type GiverReason, type MatchContext,
 } from '../services/giving/matching';
 import {
-  listFundMap, listGiverLinks, listQueue, postGifts, setIgnored, stageGifts,
+  listFundMap, listGiverLinks, listQueue, postGifts, runAutoPost, setIgnored, stageGifts,
 } from '../services/giving/repo';
+import { FLAG_TEXT } from '../supabase/functions/_shared/interac';
+import MailboxPanel, { EmailViewer } from './MailboxPanel';
 import type {
   ColumnMapping, CsvTable, DateOrder, DocumentProvider, FileProvider, ParseResult, ProviderId, SourceDoc, StagedGift,
 } from '../services/giving/types';
@@ -45,6 +47,7 @@ interface Row extends StagedGift {
   candidates?: string[];
   fundIdEff?: string;
   fundReason?: FundReason | 'chosen';
+  flags: string[];
   ready: boolean;
 }
 
@@ -59,7 +62,8 @@ const ReasonBadge: React.FC<{ reason?: string; weak?: boolean }> = ({ reason, we
 
 const GivingImport: React.FC = () => {
   const { user } = useAuth();
-  const canManage = user?.role === UserRole.Administrator || user?.role === UserRole.Treasurer;
+  const isAdmin = user?.role === UserRole.Administrator;
+  const canManage = isAdmin || user?.role === UserRole.Treasurer;
   const [providerId, setProviderIdRaw] = useState<ProviderId>(PROVIDERS[0].id);
   const provider = PROVIDERS.find(p => p.id === providerId)!;
 
@@ -80,6 +84,8 @@ const GivingImport: React.FC = () => {
   const [groupBy, setGroupBy] = useState<'auto' | 'date' | 'week' | 'deposit'>('auto');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showIgnored, setShowIgnored] = useState(false);
+  const [reviewed, setReviewed] = useState<Set<string>>(new Set());
+  const [viewingEmail, setViewingEmail] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<Note>(null);
 
@@ -122,13 +128,17 @@ const GivingImport: React.FC = () => {
       const giverIdEff = chosen || g.giverId || sg.giverId;
       const key = fundKeyOf(g);
       const fundIdEff = (key ? fundChoice[key] : rowFundChoice[g.id]) || g.fundId || sf.fundId;
+      // Problems in the email itself always show; matcher problems only while unresolved
+      // (except envelope warnings, which matter even after someone picks a giver).
+      const flags = [...new Set([...g.reviewFlags, ...g.matchFlags.filter(f =>
+        f.startsWith('envelope_') || (f === 'needs_giver' && !giverIdEff) || (f === 'fund_unclear' && !fundIdEff))])];
       return {
         ...g, giverIdEff, fundIdEff, fundReason: (key ? fundChoice[key] : rowFundChoice[g.id]) ? 'chosen' : sf.reason, candidates: sg.candidates,
-        giverReason: chosen ? 'chosen' : g.giverId ? 'remembered' : sg.reason,
-        ready: !g.ignored && g.status === 'succeeded' && !!giverIdEff && !!fundIdEff,
+        giverReason: chosen ? 'chosen' : g.giverId ? 'remembered' : sg.reason, flags,
+        ready: !g.ignored && g.status === 'succeeded' && !!giverIdEff && !!fundIdEff && (flags.length === 0 || reviewed.has(g.id)),
       };
     });
-  }, [queue, ctx, giverChoice, fundChoice, rowFundChoice]);
+  }, [queue, ctx, giverChoice, fundChoice, rowFundChoice, reviewed]);
 
   const active = rows.filter(r => !r.ignored);
   const ignoredRows = rows.filter(r => r.ignored);
@@ -154,7 +164,8 @@ const GivingImport: React.FC = () => {
         batchDate: dates[dates.length - 1],
         gross: ready.reduce((s, i) => s + i.amount, 0),
         fees: ready.reduce((s, i) => s + i.fee, 0),
-        unresolved: items.filter(i => i.status === 'succeeded' && !i.ready).length,
+        unresolved: items.filter(i => i.status === 'succeeded' && !i.ready && !(i.flags.length && i.giverIdEff && i.fundIdEff)).length,
+        flagged: items.filter(i => i.flags.length > 0 && !reviewed.has(i.id)).length,
         pending: items.filter(i => i.status !== 'succeeded').length,
       };
     }).sort((a, b) => a.batchDate.localeCompare(b.batchDate));
@@ -315,6 +326,8 @@ const GivingImport: React.FC = () => {
         </div>
       )}
 
+      {providerId === 'e_transfer' && <MailboxPanel isAdmin={isAdmin} canManage={canManage} />}
+
       {/* ---------------- Upload ---------------- */}
       {(fp || dp) && canManage && (
         <section className="bg-white rounded-2xl shadow-md border border-gray-100 p-6">
@@ -436,6 +449,17 @@ const GivingImport: React.FC = () => {
             </p>
           </div>
           <div className="flex items-center gap-3 text-sm">
+            {providerId === 'e_transfer' && canManage && active.length > 0 && (
+              <button data-testid="run-matching" disabled={busy}
+                onClick={() => run(async () => {
+                  const r = await runAutoPost(providerId);
+                  const b = Object.entries(r.batches ?? {}).map(([n, c]) => `#${n} (+${c})`).join(', ');
+                  setNote({ kind: 'ok', text: `${r.posted} gift(s) posted automatically${b ? ` to ${b}` : ''}; ${r.held_for_review} waiting for review.` });
+                })}
+                className="px-3 py-1 rounded-lg border border-church-500 text-church-700 hover:bg-church-50 disabled:opacity-50">
+                Auto-post confident gifts
+              </button>
+            )}
             <label className="flex items-center gap-1 text-gray-600">Group by
               <select value={groupBy} onChange={e => setGroupBy(e.target.value as typeof groupBy)} className="border rounded px-1 py-0.5">
                 <option value="auto">Auto</option>{provider.kind === 'file' && <option value="deposit">{provider.label} batch / deposit</option>}
@@ -496,6 +520,7 @@ const GivingImport: React.FC = () => {
                   <div className="font-semibold text-gray-800">{g.label}</div>
                   <div className="text-xs text-gray-500">{g.dateRange} · {g.items.length} gift{g.items.length === 1 ? '' : 's'}
                     {g.unresolved > 0 && <span className="text-red-600"> · {g.unresolved} need a giver or fund</span>}
+                    {g.flagged > 0 && <span className="text-amber-700"> · {g.flagged} flagged for review</span>}
                     {g.pending > 0 && <span className="text-amber-600"> · {g.pending} not completed yet</span>}
                   </div>
                 </div>
@@ -525,6 +550,25 @@ const GivingImport: React.FC = () => {
                           r.externalId.startsWith('H') && /^H[0-9a-f]{8}-\d+$/.test(r.externalId) ? '' : r.externalId,
                         ].filter(Boolean).join(' · ')}</div>
                         {r.status !== 'succeeded' && <span className="text-[10px] uppercase font-semibold text-amber-700">{r.status}</span>}
+                        {r.flags.length > 0 && (
+                          <div className="mt-1 space-y-0.5" data-testid="gift-flags">
+                            {r.flags.map(f => (
+                              <div key={f} className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 flex gap-1">
+                                <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />{FLAG_TEXT[f] ?? f}
+                              </div>
+                            ))}
+                            {canManage && (
+                              <label className="text-[11px] text-gray-700 flex items-center gap-1">
+                                <input type="checkbox" checked={reviewed.has(r.id)} data-testid="reviewed"
+                                  onChange={e => setReviewed(s => { const n = new Set(s); e.target.checked ? n.add(r.id) : n.delete(r.id); return n; })} />
+                                Reviewed — OK to post
+                              </label>
+                            )}
+                          </div>
+                        )}
+                        {r.inboundMessageId && canManage && (
+                          <button onClick={() => setViewingEmail(r.inboundMessageId!)} className="text-[11px] text-church-600 underline">View email</button>
+                        )}
                       </td>
                       <td className="p-2 text-gray-600 hidden lg:table-cell">
                         {fundKeyOf(r) ? (r.fundName || r.fundKey) : (
@@ -538,7 +582,11 @@ const GivingImport: React.FC = () => {
                               </select>
                               <ReasonBadge reason={r.fundIdEff ? r.fundReason : undefined} weak={r.fundReason === 'guess'} />
                             </div>
-                            {r.memo && <div className="text-xs text-gray-400 mt-0.5 truncate max-w-[14rem]" title={r.memo}>“{r.memo}”</div>}
+                            {(r.memoRaw ?? r.memo) && (
+                              <div className="text-xs text-gray-500 mt-0.5 font-mono whitespace-pre-wrap break-words max-w-[16rem]" title="Memo exactly as sent">
+                                “{r.memoRaw ?? r.memo}”
+                              </div>
+                            )}
                           </div>
                         )}
                       </td>
@@ -591,6 +639,8 @@ const GivingImport: React.FC = () => {
           </div>
         )}
       </section>
+
+      {viewingEmail && <EmailViewer inboundId={viewingEmail} onClose={() => setViewingEmail(null)} />}
 
       {canManage && groups.length > 0 && (
         <div className="fixed bottom-0 left-64 right-0 bg-white/95 backdrop-blur border-t border-gray-200 px-8 py-3 flex items-center justify-between z-40">

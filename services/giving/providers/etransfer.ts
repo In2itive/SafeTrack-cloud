@@ -4,139 +4,18 @@
  * gift per email.
  *
  * Input: .eml files (saved from Gmail / Outlook), an .mbox export, or email
- * text pasted in. The same parseInteracEmail() is meant to run server-side
- * later, when notifications are forwarded to an inbound address
- * (docs/GIVING_PROVIDERS.md).
- *
- * Banks and Interac change the wording, and notices come in English or
- * French, so fields are found by label and phrase, never by position.
+ * text pasted in. The reader itself (parseInteracEmail) lives in
+ * supabase/functions/_shared/interac.ts and is the same code the
+ * mailbox-poll Edge Function runs for automatic intake.
  */
 import PostalMime from 'postal-mime';
 import type { DocumentProvider, GiftRecord, ParseResult, SkippedRow, SourceDoc } from '../types';
-import { hashString, parseAmount } from '../parse';
+import {
+  FLAG_TEXT, emailPartsFromMime, fromForwardedHeaders, htmlToText, parseInteracEmail, type EmailParts,
+} from '../../../supabase/functions/_shared/interac';
 
-export interface EmailParts {
-  subject?: string;
-  from?: string;          // address
-  replyTo?: string;       // address
-  to?: string[];
-  date?: string;          // ISO
-  text: string;
-}
-
-const INTERAC_DOMAIN = /payments\.interac\.ca|interac\.ca/i;
-const NOT_A_DEPOSIT = /request(?:ed)? money|money request|demande de fonds|cancel+ed|annul|declin|refus|expire|reminder|rappel|has not been deposited|n'a pas été déposé|stopped|returned to you/i;
-
-const htmlToText = (html: string) => html
-  .replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ')
-  .replace(/<br\s*\/?>|<\/(p|div|tr|li|h\d|table)>/gi, '\n')
-  .replace(/<[^>]+>/g, ' ')
-  .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&#36;|&dollar;/g, '$')
-  .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#39;|&rsquo;/g, "'").replace(/&quot;/g, '"')
-  .replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n');
-
-const titleCase = (s: string) =>
-  s === s.toUpperCase() ? s.toLowerCase().replace(/(^|[\s\-'’.])(\p{L})/gu, (_, a, b) => a + b.toUpperCase()) : s;
-
-const clean = (s?: string) => s?.replace(/\s+/g, ' ').replace(/^["'“”\s]+|["'“”\s.]+$/g, '').trim() || undefined;
-
-const localIsoDate = (d: Date) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-
-/** Envelope number written in a memo: "env 123", "Envelope #123", "enveloppe no 45", or just "123". */
-export function envelopeFromMemo(memo?: string): number | undefined {
-  if (!memo) return undefined;
-  const m = memo.match(/\benv(?:e?lope?|eloppe)?\.?\s*(?:#|no\.?|num(?:ber|éro)?\.?|n°)?\s*:?\s*#?\s*(\d{1,5})\b/i)
-         ?? memo.match(/^\s*#?\s*(\d{1,5})\s*$/);
-  return m ? parseInt(m[1], 10) : undefined;
-}
-
-export type InteracResult = { gift: GiftRecord; warnings: string[] } | { skip: string };
-
-/** One notification email -> one gift (or a reason to skip it). */
-export function parseInteracEmail(e: EmailParts): InteracResult {
-  const subject = e.subject ?? '';
-  const body = e.text.replace(/\r/g, '');
-  const all = `${subject}\n${body}`;
-  const flat = all.replace(/\s+/g, ' ');
-  const warnings: string[] = [];
-
-  if (!/e-?transfer|virement/i.test(all)) return { skip: 'Not an Interac e-Transfer notification' };
-  if (NOT_A_DEPOSIT.test(subject) || (!/sent you|deposited|déposé|vous a envoyé|received|reçu/i.test(flat) && NOT_A_DEPOSIT.test(flat)))
-    return { skip: 'Not a deposit (request, reminder, cancellation or expiry notice)' };
-
-  // ---- amount ----
-  const amtNear = flat.match(/(?:sent you|vous a envoyé|deposited|déposé|amount|montant)[^$\d]{0,60}?(\$\s?[\d,]+(?:\.\d{2})?|[\d\s ]+,\d{2}\s?\$)/i)
-               ?? flat.match(/(\$\s?[\d,]+\.\d{2}|[\d\s ]+,\d{2}\s?\$)/);
-  const amount = amtNear ? parseAmount(amtNear[1].replace(/ /g, ' ')) : NaN;
-  if (!(amount > 0)) return { skip: 'No amount found' };
-
-  // ---- reference number ----
-  const ref = flat.match(/(?:reference\s*(?:number|no\.?|#)?|num[ée]ro de r[ée]f[ée]rence|r[ée]f[ée]rence)\s*[:#]?\s*([A-Za-z0-9]{8,24})\b/i)?.[1];
-
-  // ---- sender name + email ----
-  let name: string | undefined;
-  let email: string | undefined;
-  const nameEmail = (re: RegExp) => { const m = flat.match(re); if (m) { name ??= clean(m[1]); email ??= m[2]?.toLowerCase(); } };
-  nameEmail(/(?:INTERAC e-Transfer|Virement INTERAC)\s*:\s*(.+?)\s+(?:\(([^()\s]+@[^()\s]+)\)\s+)?(?:has\s+)?(?:sent you|vous a envoy)/i);
-  nameEmail(/(?:money transfer|transfer|virement)\s+(?:from|de)\s+(.+?)\s+(?:\(([^()\s]+@[^()\s]+)\)\s+)?(?:has been|a été)/i);
-  nameEmail(/(?:^|[,.:!]\s+|\n)([\p{L}][\p{L}'’.\- &]{1,80}?)\s+(?:\(([^()\s]+@[^()\s]+)\)\s+)?(?:has\s+)?(?:sent you|vous a envoyé)\b/iu);
-  const label = (re: RegExp) => clean(body.match(re)?.[1]);
-  name ??= label(/^\s*(?:sender(?:'s)?(?: name)?|sent by|from|expéditeur|de la part de)\s*:\s*(.+)$/im);
-  email ??= label(/(?:sender(?:'s)?\s*e-?mail(?: address)?|e-?mail(?: address)?|courriel(?: de l'expéditeur)?)\s*:\s*([^\s<>()]+@[^\s<>()]+)/i)?.toLowerCase();
-  if (!email && e.replyTo && !INTERAC_DOMAIN.test(e.replyTo)) email = e.replyTo.toLowerCase();
-  if (!email) {
-    const exclude = new Set((e.to ?? []).map(x => x.toLowerCase()));
-    const found = [...new Set((body.match(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g) ?? []).map(x => x.toLowerCase()))]
-      .filter(x => !INTERAC_DOMAIN.test(x) && !exclude.has(x) && !/no-?reply|notify|catch|support|help|bank|caisse/i.test(x));
-    if (found.length === 1) email = found[0];
-  }
-  if (name && /^(hi|hello|bonjour|dear)\b/i.test(name)) name = undefined;
-  if (!name && !email) return { skip: 'No sender name or email found' };
-
-  // ---- message / memo ----
-  let memo = body.match(/^\s*(?:message(?: from sender)?|memo|note|message de l'expéditeur)\s*:[ \t]*(.*)$/im);
-  let memoText = memo?.[1]?.trim();
-  if (memo && !memoText) {
-    // label on its own line: the message is on the next non-empty line
-    const after = body.slice((memo.index ?? 0) + memo[0].length).split('\n').map(l => l.trim()).find(Boolean);
-    memoText = after;
-  }
-  memoText = clean(memoText);
-  if (memoText && /^(none|aucun|n\/a|-)$/i.test(memoText)) memoText = undefined;
-
-  // ---- date ----
-  let giftDate: string | undefined;
-  if (e.date && !Number.isNaN(Date.parse(e.date))) giftDate = localIsoDate(new Date(e.date));
-  if (!giftDate) {
-    const d = body.match(/^\s*(?:date|sent on|deposited on|date d'envoi|envoyé le)\s*:\s*(.+)$/im)?.[1];
-    if (d && !Number.isNaN(Date.parse(d))) giftDate = localIsoDate(new Date(d));
-  }
-  if (!giftDate) return { skip: 'No date found (upload the email file rather than pasting, so its date comes along)' };
-
-  if (!INTERAC_DOMAIN.test(`${e.from ?? ''} ${all}`))
-    warnings.push('does not show Interac (notify@payments.interac.ca) as the sender');
-
-  const displayName = name ? titleCase(name) : undefined;
-  const parts = displayName?.split(/\s+/) ?? [];
-  const externalId = ref ?? `H${hashString([giftDate, amount.toFixed(2), (name ?? '').toLowerCase(), email ?? '', memoText ?? ''].join('|'))}`;
-  if (!ref) warnings.push('has no reference number; it is identified by date, amount and sender');
-
-  return {
-    warnings,
-    gift: {
-      externalId, giftDate, amount, fee: 0, currency: 'CAD', method: 'e_transfer', status: 'succeeded',
-      payerExternalId: email,                // e-Transfers are tied to the sender's email
-      payerEnvelope: envelopeFromMemo(memoText),
-      payerName: displayName,
-      payerFirstName: parts.length > 1 ? parts.slice(0, -1).join(' ') : undefined,
-      payerLastName: parts.length > 1 ? parts[parts.length - 1] : undefined,
-      payerEmail: email,
-      memo: memoText,
-      raw: { subject, from: e.from ?? '', date: e.date ?? '', reference: ref ?? '', message: memoText ?? '' },
-    },
-  };
-}
+export { envelopeFromMemo, parseInteracEmail } from '../../../supabase/functions/_shared/interac';
+export type { EmailParts } from '../../../supabase/functions/_shared/interac';
 
 // ---------------------------------------------------------------------------
 // Splitting uploads into individual emails
@@ -165,17 +44,6 @@ export function splitPasted(t: string): string[] {
   return out;
 }
 
-/** Pull the subject/from/date that a forwarded email repeats in its body. */
-function fromForwardedHeaders(text: string): Partial<EmailParts> {
-  const h = (k: string) => text.match(new RegExp(`^\\s*(?:${k})\\s*:\\s*(.+)$`, 'im'))?.[1]?.trim();
-  const date = h('date|sent|envoyé');
-  return {
-    subject: h('subject|objet'),
-    from: h('from|de')?.match(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/)?.[0],
-    date: date && !Number.isNaN(Date.parse(date.replace(/ at /, ' '))) ? new Date(date.replace(/ at /, ' ')).toISOString() : undefined,
-  };
-}
-
 async function toEmails(doc: SourceDoc): Promise<{ label: string; email: EmailParts }[]> {
   const text = typeof doc.content === 'string' ? doc.content : new TextDecoder().decode(doc.content);
   const fileDate = doc.lastModified ? new Date(doc.lastModified).toISOString() : undefined;
@@ -186,18 +54,7 @@ async function toEmails(doc: SourceDoc): Promise<{ label: string; email: EmailPa
   for (const [i, chunk] of chunks.entries()) {
     const label = chunks.length > 1 ? `${doc.name} #${i + 1}` : doc.name;
     if (looksLikeMime(chunk)) {
-      const m = await PostalMime.parse(chunk);
-      const bodyText = m.text?.trim() ? m.text : htmlToText(m.html ?? '');
-      const fwd = fromForwardedHeaders(bodyText);
-      const forwarded = /^(fw|fwd|tr)\s*:/i.test(m.subject ?? '');
-      out.push({ label, email: {
-        subject: forwarded && fwd.subject ? fwd.subject : (m.subject ?? fwd.subject),
-        from: forwarded && fwd.from ? fwd.from : m.from?.address,
-        replyTo: forwarded ? undefined : m.replyTo?.[0]?.address,
-        to: (m.to ?? []).map(x => x.address).filter((x): x is string => !!x),
-        date: forwarded && fwd.date ? fwd.date : (m.date ?? fwd.date ?? fileDate),
-        text: bodyText,
-      } });
+      out.push({ label, email: emailPartsFromMime(await PostalMime.parse(chunk), fileDate) });
     } else {
       const plain = /<\/?(html|body|div|table|p)\b/i.test(chunk) ? htmlToText(chunk) : chunk;
       const fwd = fromForwardedHeaders(plain);
@@ -223,12 +80,12 @@ async function parseDocuments(docs: SourceDoc[]): Promise<ParseResult> {
       if ('skip' in r) { skipped.push({ line, reason: r.skip, summary: `${label}${email.subject ? ` · ${email.subject}` : ''}` }); continue; }
       if (seen.has(r.gift.externalId)) { skipped.push({ line, reason: 'Same e-Transfer appears twice in this upload', summary: label }); continue; }
       seen.add(r.gift.externalId);
-      gifts.push(r.gift);
-      for (const w of r.warnings) notes.set(w, [...(notes.get(w) ?? []), r.gift.payerName ?? label]);
+      gifts.push(r.gift as GiftRecord);
+      for (const f of r.gift.flags) notes.set(f, [...(notes.get(f) ?? []), r.gift.payerName ?? label]);
     }
   }
-  const warnings = [...notes.entries()].map(([w, who]) =>
-    `${who.length} email${who.length === 1 ? '' : 's'} ${w}: ${who.slice(0, 5).join(', ')}${who.length > 5 ? '…' : ''}. Check against the bank statement.`);
+  const warnings = [...notes.entries()].map(([f, who]) =>
+    `${who.length} flagged for review — ${FLAG_TEXT[f] ?? f} (${who.slice(0, 5).join(', ')}${who.length > 5 ? '…' : ''})`);
   return { gifts, skipped, warnings };
 }
 

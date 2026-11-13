@@ -46,13 +46,15 @@ jobs:
         run: |
           for fn in $(ls -d supabase/functions/*/ | xargs -n1 basename | grep -v '^_'); do
             echo "Deploying $fn"
-            supabase functions deploy "$fn" --remote="$PROJECT_REF" --use-api --yes
+            # mailbox-poll is called by the scheduler (no user session); it authenticates every request itself
+            extra=""; [ "$fn" = "mailbox-poll" ] && extra="--no-verify-jwt"
+            supabase functions deploy "$fn" --remote="$PROJECT_REF" --use-api --yes $extra
           done
 
       - name: Smoke test (functions respond, reject anonymous calls)
         if: steps.token.outputs.present == 'true'
         run: |
-          for fn in members insight; do
+          for fn in members insight mailbox-poll; do
             code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "https://$PROJECT_REF.supabase.co/functions/v1/$fn")
             echo "$fn -> HTTP $code (expect 401 without a session)"
             [ "$code" = "401" ] || { echo "::error::$fn did not reject an anonymous call"; exit 1; }

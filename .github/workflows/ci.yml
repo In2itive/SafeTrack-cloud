@@ -15,6 +15,15 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run test:unit
+      - name: Type-check Edge Functions under Deno
+        env:
+          DENO_NO_PACKAGE_JSON: '1'   # functions resolve their own imports, not the app's node_modules
+        run: |
+          for fn in supabase/functions/*/; do
+            name=$(basename "$fn"); [ "${name#_}" = "$name" ] || continue
+            cfg=""; [ -f "$fn/deno.json" ] && cfg="--config $fn/deno.json"
+            npx -y deno@2 check $cfg "$fn/index.ts"
+          done
       - run: npm run build
       - name: Filenames must be valid on Windows
         run: |

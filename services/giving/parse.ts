@@ -52,22 +52,7 @@ export function parseCsv(text: string): CsvTable {
 
 export const normHeader = (h: string) => h.toLowerCase().replace(/[’']/g, "'").replace(/[_\s]+/g, ' ').trim();
 
-/** "$1,234.56", "1234.56 CAD", "(25.00)" -> number; NaN when not a number. */
-export function parseAmount(v: string | undefined): number {
-  if (v === undefined) return NaN;
-  let s = v.trim();
-  if (!s) return NaN;
-  let neg = false;
-  if (/^\(.*\)$/.test(s)) { neg = true; s = s.slice(1, -1); }
-  s = s.replace(/[A-Za-z$€£\s]/g, '');
-  if (s.startsWith('-')) { neg = !neg; s = s.slice(1); }
-  if (/^\d{1,3}(\.\d{3})+,\d{1,2}$/.test(s)) s = s.replace(/\./g, '').replace(',', '.'); // 1.234,56
-  else if (/^\d{1,3}( \d{3})*,\d{2}$/.test(v.trim().replace(/[^\d ,]/g, '').trim())) s = s.replace(',', '.'); // 50,00 / 1 234,56 (fr-CA)
-  else s = s.replace(/,/g, '');
-  if (!/^\d*\.?\d+$/.test(s)) return NaN;
-  const n = Math.round(parseFloat(s) * 100) / 100;
-  return neg ? -n : n;
-}
+export { parseAmount, hashString } from '../../supabase/functions/_shared/interac';
 
 const MONTHS: Record<string, number> = {
   jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, sept: 9, oct: 10, nov: 11, dec: 12,
@@ -109,11 +94,4 @@ export function parseDate(v: string | undefined, order: Exclude<DateOrder, 'auto
   m = s.match(/^(\d{1,2})[\s-]([A-Za-z]{3,9})\.?[\s-](\d{2,4})/);                      // 8 Nov 2026 / 08-Nov-26
   if (m && MONTHS[m[2].slice(0, 3).toLowerCase()]) return iso(+m[3], MONTHS[m[2].slice(0, 3).toLowerCase()], +m[1]);
   return null;
-}
-
-/** Stable short hash (FNV-1a, hex) for synthesising ids when a file has none. */
-export function hashString(s: string): string {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
-  return (h >>> 0).toString(16).padStart(8, '0');
 }
