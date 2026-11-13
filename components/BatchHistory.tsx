@@ -445,7 +445,6 @@ const BatchHistory: React.FC = () => {
                                   <input 
                                     type="number" 
                                     placeholder="Count..."
-                                    disabled={activeBatch.status === BatchStatus.Finalized}
                                     className="w-full max-w-[180px] p-2 rounded-lg border border-gray-400 font-bold bg-white focus:ring-2 focus:ring-church-500 outline-none"
                                     value={userCheckCount}
                                     onChange={(e) => setUserCheckCount(e.target.value)}
@@ -462,7 +461,6 @@ const BatchHistory: React.FC = () => {
                                       type="number" 
                                       step="0.01"
                                       placeholder="0.00"
-                                      disabled={activeBatch.status === BatchStatus.Finalized}
                                       className="w-full pl-7 p-2 rounded-lg border border-gray-400 font-bold bg-white focus:ring-2 focus:ring-church-500 outline-none"
                                       value={userCheckAmount}
                                       onChange={(e) => setUserCheckAmount(e.target.value)}
