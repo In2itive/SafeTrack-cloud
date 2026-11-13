@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "e2e": "node tests/e2e/admin-flow.mjs && node tests/e2e/tellers-flow.mjs",
-    "seed:demo": "node --env-file=.env scripts/seed-demo.mjs"
+    "seed:demo": "node --env-file=.env scripts/seed-demo.mjs",
+    "test:unit": "tsx tests/unit/giving.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",

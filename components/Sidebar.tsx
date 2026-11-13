@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, FilePlus, ClipboardList, Settings, LogOut, ShieldCheck, UserCog, KeyRound } from 'lucide-react';
+import { LayoutDashboard, Users, FilePlus, ClipboardList, Settings, LogOut, ShieldCheck, UserCog, KeyRound, CreditCard } from 'lucide-react';
 import ChangePasswordModal from './ChangePasswordModal';
 import { useAuth } from '../contexts/AuthContext';
 import { UserRole } from '../types';
@@ -44,6 +44,12 @@ const Sidebar: React.FC = () => {
             <ClipboardList className="w-5 h-5" />
             Batch History
           </NavLink>
+          {(user?.role === UserRole.Administrator || user?.role === UserRole.Treasurer) && (
+            <NavLink to="/online-giving" className={navClass}>
+              <CreditCard className="w-5 h-5" />
+              Online Giving
+            </NavLink>
+          )}
           <NavLink to="/settings" className={navClass}>
             <Settings className="w-5 h-5" />
             Admin / Backup

@@ -594,7 +594,8 @@ const BatchEntry: React.FC = () => {
   const getSourceIcon = (source: BatchSource) => {
     switch (source) {
         case BatchSource.ETransfer: return <Smartphone className="w-3 h-3" />;
-        case BatchSource.PushPay: return <CreditCard className="w-3 h-3" />;
+        case BatchSource.PushPay:
+        case BatchSource.Stripe: return <CreditCard className="w-3 h-3" />;
         default: return <Users className="w-3 h-3" />;
     }
   };

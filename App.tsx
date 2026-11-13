@@ -10,6 +10,7 @@ import DepositSlip from './components/DepositSlip';
 import AccountingReport from './components/AccountingReport';
 import EnvelopeReport from './components/EnvelopeReport';
 import UserManagement from './components/UserManagement';
+import GivingImport from './components/GivingImport';
 import Login from './components/Login';
 import InitialSetup from './components/InitialSetup';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -38,6 +39,7 @@ const AppContent: React.FC = () => {
           <Route path="givers" element={<GiverRegistry />} />
           <Route path="batch-entry" element={<BatchEntry />} />
           <Route path="history" element={<BatchHistory />} />
+          <Route path="online-giving" element={<GivingImport />} />
           <Route path="settings" element={<Settings />} />
           <Route path="admin/users" element={<UserManagement />} />
         </Route>

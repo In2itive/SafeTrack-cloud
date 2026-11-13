@@ -14,6 +14,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+      - run: npm run test:unit
       - run: npm run build
       - name: Filenames must be valid on Windows
         run: |

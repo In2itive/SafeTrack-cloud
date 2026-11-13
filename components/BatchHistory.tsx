@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { formatDate } from '../utils/date';
 import { useLive, listBatches, listDonations, getGivers, finalizeBatch, unlockBatch, deleteBatch, signAsSecondTeller, batchLabel } from '../services/repo';
-import { BatchStatus, PaymentMethod, BatchSource, UserRole } from '../types';
+import { BatchStatus, PaymentMethod, BatchSource, UserRole, isProviderSource } from '../types';
+import { getBatchProviderSummary } from '../services/giving/repo';
 import { FileText, Lock, CheckCircle, Banknote, ScrollText, Unlock, AlertTriangle, X, ShieldAlert, Edit, Smartphone, CreditCard, Users, FileSpreadsheet, Trash2, Mail } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -38,6 +39,9 @@ const BatchHistory: React.FC = () => {
   };
 
   const activeBatch = batches?.find(b => b.id === selectedBatchId);
+  const providerSummary = useLive(
+    () => activeBatch && isProviderSource(activeBatch.source) ? getBatchProviderSummary(activeBatch.id!) : Promise.resolve(null),
+    [activeBatch?.id, activeBatch?.source, activeBatch?.totalAmount]);
 
   // Auto-select latest batch on load
   useEffect(() => {
@@ -208,7 +212,8 @@ const BatchHistory: React.FC = () => {
   const getSourceIcon = (source: BatchSource) => {
     switch (source) {
         case BatchSource.ETransfer: return <Smartphone className="w-3 h-3" />;
-        case BatchSource.PushPay: return <CreditCard className="w-3 h-3" />;
+        case BatchSource.PushPay:
+        case BatchSource.Stripe: return <CreditCard className="w-3 h-3" />;
         default: return <Users className="w-3 h-3" />;
     }
   };
@@ -385,6 +390,29 @@ const BatchHistory: React.FC = () => {
                    </div>
                  ) : (
                    <>
+                     {providerSummary && (
+                       <div className="p-4 rounded-xl border-2 bg-blue-50/40 border-blue-200" data-testid="provider-reconcile">
+                         <h4 className="text-lg font-bold text-gray-700 flex items-center gap-2 mb-1">
+                           <CreditCard className="w-5 h-5 text-church-500" /> {activeBatch.source} reconciliation
+                         </h4>
+                         <p className="text-sm text-gray-500 mb-3">
+                           Second person: check these figures against the {activeBatch.source} deposit report and the bank statement before signing.
+                         </p>
+                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
+                           <div className="bg-white rounded-lg border p-2"><div className="text-xs text-gray-400">Gifts</div><div className="text-lg font-bold">{providerSummary.count}</div></div>
+                           <div className="bg-white rounded-lg border p-2"><div className="text-xs text-gray-400">Gross (receipted)</div><div className="text-lg font-bold">${providerSummary.gross.toFixed(2)}</div></div>
+                           <div className="bg-white rounded-lg border p-2"><div className="text-xs text-gray-400">Processing fees</div><div className="text-lg font-bold text-red-600">-${providerSummary.fees.toFixed(2)}</div></div>
+                           <div className="bg-white rounded-lg border p-2"><div className="text-xs text-gray-400">Expected bank deposit</div><div className="text-lg font-bold text-green-700">${providerSummary.net.toFixed(2)}</div></div>
+                         </div>
+                         {Math.abs(providerSummary.gross - activeBatch.totalAmount) >= 0.01 && (
+                           <p className="mt-3 text-sm text-amber-700 flex gap-1"><AlertTriangle className="w-4 h-4" /> This batch was edited after import: its total (${activeBatch.totalAmount.toFixed(2)}) differs from the imported gifts.</p>
+                         )}
+                         {providerSummary.refunded > 0 && (
+                           <p className="mt-3 text-sm text-red-700 flex gap-1"><AlertTriangle className="w-4 h-4" /> {providerSummary.refunded} gift(s) in this batch were refunded in {activeBatch.source} after import. Remove them before finalizing.</p>
+                         )}
+                       </div>
+                     )}
+                     {!(isProviderSource(activeBatch.source) && systemCashTotal === 0 && systemCheckCount === 0) && (<>
                      {/* Cash Audit Section */}
                      <div className={`p-4 rounded-xl border-2 transition-colors ${isCashBalanced ? 'bg-green-50/30 border-green-200' : 'bg-red-50/30 border-red-200'}`}>
                         <div className="flex justify-between items-center mb-3">
@@ -518,6 +546,7 @@ const BatchHistory: React.FC = () => {
                            </div>
                         </div>
                      </div>
+                     </>)}
                    </>
                  )}
                </div>
