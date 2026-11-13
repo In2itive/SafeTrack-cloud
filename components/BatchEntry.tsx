@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   useLive, listGivers, getGivers, getSystemGivers, SystemGivers, listInternalAccounts, listFunds,
-  getBatch, listDonations, saveBatch, deleteDonation, addGiver, getNextEnvelopeNumber, shortId,
+  getBatch, listDonations, saveBatch, deleteDonation, addGiver, getNextEnvelopeNumber,
 } from '../services/repo';
 import { PaymentMethod, BatchStatus, DonationSplit, Giver, Batch, BatchSource, FundEntity } from '../types';
 import { Plus, Save, Trash2, AlertCircle, Layers, Calculator, X, Check, Banknote, Search, UserPlus, AlertTriangle, ChevronDown, ArrowLeft, Users, CreditCard, Smartphone } from 'lucide-react';
@@ -554,8 +554,10 @@ const BatchEntry: React.FC = () => {
       currentBatchId = result.batchId;
       savedBatchIdRef.current = result.batchId;
       kept.forEach((row, i) => { if (!row.donationId) newDonationIds[row.id] = result.donationIds[i]; });
-      if (!editingBatch) {
-        setEditingBatch({ id: result.batchId } as Batch);
+      if (!editingBatch?.batchNumber) {
+        // pick up the batch number the server just assigned
+        const fresh = await getBatch(result.batchId);
+        if (fresh) setEditingBatch(fresh);
       }
       
       if (Object.keys(newDonationIds).length > 0) {
@@ -611,7 +613,7 @@ const BatchEntry: React.FC = () => {
                 </button>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h2 className="text-3xl font-bold text-gray-800">Edit Batch #{shortId(editBatchId)}</h2>
+                    <h2 className="text-3xl font-bold text-gray-800">Edit Batch #{editingBatch?.batchNumber || '…'}</h2>
                     {editingBatch && (
                       <span className="flex items-center gap-1 bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded-full font-bold border border-gray-200">
                         {getSourceIcon(editingBatch.source)} {editingBatch.source}

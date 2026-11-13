@@ -19,6 +19,14 @@ not by the app, so a bug or a tampered browser can't cross churches.
 | `batch_signoffs`, `batch_finalizations`, `batch_unlocks` | `batch.finalizedBy` | Written only by RPCs. Full history kept across admin adjustments |
 | `audit_log` | — | Every insert/update/delete, who and before/after. Admins + treasurers can read; nobody can edit |
 
+## Numbering
+- **Batch number** `YYYY####` (e.g. `20260001`): per church, per year of the batch date, starting at 0001.
+- **Transaction number** `YYYY####NNNNNN` (e.g. `20260001000001`): batch number + 6-digit sequence within the batch.
+- Assigned by triggers (`private.batch_counters`, `batches.last_txn_seq`), so concurrent counting rooms can't collide.
+- Permanent: clients can't set or change them, and even the database owner can't renumber. Deleted rows leave gaps.
+- UUIDs stay as the internal keys. Imported batches keep their old number in `legacy_batch_number`.
+- If a batch's date is later moved to another year, its number does not change.
+
 ## Controls (enforced in the database)
 - **Dual teller:** `finalize_batch()` requires sign-offs from two different users on the
   current revision, made *after* the last change to the batch. The second teller signs

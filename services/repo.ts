@@ -341,7 +341,8 @@ function donationFromRow(d: DonationRow & { donation_splits?: any[] }, batchDate
     ...(s.internal_accounts?.code ? { internalAccount: s.internal_accounts.code } : {}),
   }));
   return {
-    id: d.id, giverId: d.giver_id, batchId: d.batch_id, amount: Number(d.amount),
+    id: d.id, transactionNumber: (d as any).transaction_number ?? undefined,
+    giverId: d.giver_id, batchId: d.batch_id, amount: Number(d.amount),
     date: batchDate ?? d.created_at.slice(0, 10),
     paymentMethod: methodFromDb[d.payment_method],
     splits: splits.length ? splits : [{ fund: 'General', amount: Number(d.amount) }],
@@ -438,7 +439,7 @@ export async function saveBatch(input: {
       p_church_id: churchId(),
       p_batch: input.batchId
         ? { id: input.batchId, batch_date: input.date, source: sourceToDb(input.source) }
-        : { batch_number: `B-${Date.now()}`, batch_date: input.date, source: sourceToDb(input.source) },
+        : { batch_date: input.date, source: sourceToDb(input.source) },  // number assigned by the server
       p_donations: donations,
       p_deleted_ids: input.deletedDonationIds,
       p_new_giver_ids: input.newGiverIds,
@@ -533,5 +534,8 @@ export async function importLegacyBackup(json: string): Promise<Record<string, n
   return write(async () => must(await supabase.rpc('import_legacy_backup', { p_church_id: churchId(), p_data: data })) as Record<string, number>);
 }
 
-/** Short, human-friendly batch reference for screens, reports and filenames. */
+/** Short fallback reference when a batch number isn't loaded yet. */
 export const shortId = (id?: string | null) => (id ? id.slice(0, 8).toUpperCase() : '');
+
+/** The batch number people see and quote (YYYY####). */
+export const batchLabel = (b?: { batchNumber?: string; id?: string } | null) => b?.batchNumber || shortId(b?.id);

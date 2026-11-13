@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { formatDate } from '../utils/date';
-import { useLive, listBatches, listDonations, getGivers, finalizeBatch, unlockBatch, deleteBatch, signAsSecondTeller, shortId } from '../services/repo';
+import { useLive, listBatches, listDonations, getGivers, finalizeBatch, unlockBatch, deleteBatch, signAsSecondTeller, batchLabel } from '../services/repo';
 import { BatchStatus, PaymentMethod, BatchSource, UserRole } from '../types';
 import { FileText, Lock, CheckCircle, Banknote, ScrollText, Unlock, AlertTriangle, X, ShieldAlert, Edit, Smartphone, CreditCard, Users, FileSpreadsheet, Trash2, Mail } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -233,7 +233,7 @@ const BatchHistory: React.FC = () => {
                 }`}
               >
                 <div className="flex justify-between items-center mb-2">
-                  <span className="font-bold">Batch #{shortId(batch.id)}</span>
+                  <span className="font-bold">Batch #{batchLabel(batch)}</span>
                   <span className={`text-xs px-2 py-1 rounded-full font-bold ${
                     batch.status === BatchStatus.Finalized ? 'bg-green-400 text-green-900' : 'bg-yellow-400 text-yellow-900'
                   }`}>
@@ -264,7 +264,7 @@ const BatchHistory: React.FC = () => {
                  
                  {/* Line 1: Title and Actions */}
                  <div className="flex justify-between items-start md:items-center gap-4">
-                   <h3 className="text-2xl font-bold text-gray-800">Batch #{shortId(activeBatch.id)}</h3>
+                   <h3 className="text-2xl font-bold text-gray-800">Batch #{batchLabel(activeBatch)}</h3>
                    
                    {/* Hidden Reports for Emailing */}
                    <div style={{ position: 'absolute', top: '-9999px', left: '-9999px', width: '1024px' }}>
@@ -495,7 +495,8 @@ const BatchHistory: React.FC = () => {
                              <table className="w-full text-sm text-left">
                                <thead className="bg-gray-50 text-gray-500">
                                  <tr>
-                                   <th className="p-2 pl-4">Cheque #</th>
+                                   <th className="p-2 pl-4">Txn #</th>
+                                   <th className="p-2">Cheque #</th>
                                    <th className="p-2">Giver</th>
                                    <th className="p-2 text-right pr-4">Amount</th>
                                  </tr>
@@ -503,7 +504,8 @@ const BatchHistory: React.FC = () => {
                                <tbody>
                                  {systemCheckDonations.map(d => (
                                    <tr key={d.id} className="border-b border-gray-50 last:border-0 hover:bg-blue-50">
-                                     <td className="p-2 pl-4 font-mono text-gray-600">{d.chequeNumber || '-'}</td>
+                                     <td className="p-2 pl-4 font-mono text-xs text-gray-400">{d.transactionNumber}</td>
+                                     <td className="p-2 font-mono text-gray-600">{d.chequeNumber || '-'}</td>
                                      <td className="p-2 text-gray-500">{giverLabel(d.giverId)}</td>
                                      <td className="p-2 text-right pr-4 font-medium">${d.amount.toFixed(2)}</td>
                                    </tr>
@@ -539,7 +541,7 @@ const BatchHistory: React.FC = () => {
                <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mb-4">
                  <Lock className="w-8 h-8 text-yellow-600" />
                </div>
-               <h3 className="text-xl font-bold text-gray-800 mb-2">Finalize Batch #{shortId(selectedBatchId)}?</h3>
+               <h3 className="text-xl font-bold text-gray-800 mb-2">Finalize Batch #{batchLabel(activeBatch)}?</h3>
                <p className="text-gray-500 mb-6 text-sm">
                  This action will <strong>permanently lock</strong> these donations and the audit record. You cannot edit this batch after finalizing.
                </p>
@@ -571,7 +573,7 @@ const BatchHistory: React.FC = () => {
                <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
                  <AlertTriangle className="w-8 h-8 text-red-600" />
                </div>
-               <h3 className="text-xl font-bold text-gray-800 mb-2">Delete Batch #{shortId(selectedBatchId)}?</h3>
+               <h3 className="text-xl font-bold text-gray-800 mb-2">Delete Batch #{batchLabel(activeBatch)}?</h3>
                <p className="text-gray-500 mb-6 text-sm">
                  Are you sure you want to delete this batch? This action <strong>cannot be undone</strong> and will remove all associated donation records.
                </p>
@@ -602,7 +604,7 @@ const BatchHistory: React.FC = () => {
                <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mb-4">
                  <Unlock className="w-8 h-8 text-yellow-600" />
                </div>
-               <h3 className="text-xl font-bold text-gray-800 mb-2">Unlock Batch #{shortId(selectedBatchId)}?</h3>
+               <h3 className="text-xl font-bold text-gray-800 mb-2">Unlock Batch #{batchLabel(activeBatch)}?</h3>
                <p className="text-gray-500 mb-4 text-sm">
                  This reopens the batch for editing. The original tellers' sign-offs stay on record,
                  and an administrator must sign off when it is finalized again.

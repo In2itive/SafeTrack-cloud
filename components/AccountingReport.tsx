@@ -1,7 +1,7 @@
 import React, { useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import { formatDate } from '../utils/date';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useLive, getSettings, getBatch, listDonations, getGivers, shortId } from '../services/repo';
+import { useLive, getSettings, getBatch, listDonations, getGivers, batchLabel } from '../services/repo';
 import { ArrowLeft, Printer, FileSpreadsheet, Download, Mail } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
 import { useAuth } from '../contexts/AuthContext';
@@ -37,7 +37,7 @@ const AccountingReport = forwardRef<ReportRef, AccountingReportProps>(({ batchId
     const element = reportRef.current;
     const opt = {
       margin: 10,
-      filename: `AccountingReport_Batch${shortId(batch.id)}_${new Date().toISOString().split('T')[0]}.pdf`,
+      filename: `AccountingReport_Batch${batchLabel(batch)}_${new Date().toISOString().split('T')[0]}.pdf`,
       image: { type: 'jpeg' as const, quality: 0.98 },
       html2canvas: { scale: 2, useCORS: true },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const }
@@ -53,7 +53,7 @@ const AccountingReport = forwardRef<ReportRef, AccountingReportProps>(({ batchId
     setIsGenerating(true);
 
     const element = reportRef.current;
-    const filename = `AccountingReport_Batch${shortId(batch.id)}_${new Date().toISOString().split('T')[0]}.pdf`;
+    const filename = `AccountingReport_Batch${batchLabel(batch)}_${new Date().toISOString().split('T')[0]}.pdf`;
     const opt = {
       margin: 10,
       filename,
@@ -65,7 +65,7 @@ const AccountingReport = forwardRef<ReportRef, AccountingReportProps>(({ batchId
     try {
       const pdfBlob = await html2pdf().set(opt).from(element).output('blob');
       const timestamp = new Date().getTime();
-      const safeFilename = `Batch_${shortId(batch.id)}_Accounting_${timestamp}.pdf`;
+      const safeFilename = `Batch_${batchLabel(batch)}_Accounting_${timestamp}.pdf`;
       
       await sendEmailWithPDF(pdfBlob, safeFilename, 'accounting');
       if (!hiddenMode) alert('Email sent successfully!');
@@ -152,7 +152,7 @@ const AccountingReport = forwardRef<ReportRef, AccountingReportProps>(({ batchId
               {settings?.churchLogo && <img src={settings.churchLogo} alt="Church Logo" className="h-16 object-contain mb-4" />}
               <h1 className="text-3xl font-bold text-gray-900 uppercase tracking-wider mb-2 print:text-2xl">Accounting Summary</h1>
               <div className="text-sm font-medium text-gray-600 print:text-xs">
-                <p>Batch #: <span className="font-bold text-gray-900">{shortId(batch.id)}</span></p>
+                <p>Batch #: <span className="font-bold text-gray-900">{batchLabel(batch)}</span></p>
                 <p>Date: <span className="font-bold text-gray-900">{formatDate(batch.date)}</span></p>
                 <p>Source: <span className="font-bold text-gray-900">{batch.source}</span></p>
                 <p>Tellers: <span className="font-bold text-gray-900">

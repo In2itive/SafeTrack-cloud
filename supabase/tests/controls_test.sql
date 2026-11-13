@@ -87,7 +87,7 @@ select pg_temp.expect_eq((select name from public.givers where church_id = :'chu
 select id as fund_general from public.funds where church_id = :'church_a' and name = 'General' \gset
 select id as fund_internal from public.funds where church_id = :'church_a' and name = 'Internal' \gset
 insert into public.internal_accounts (church_id, code) values (:'church_a', 'YOUTH-01') returning id as acct \gset
-insert into public.batches (church_id, batch_number) values (:'church_a', '2026-11-15-A') returning id as batch \gset
+insert into public.batches (church_id, batch_date) values (:'church_a', '2026-11-15') returning id as batch \gset
 
 insert into public.donations (church_id, batch_id, giver_id, amount, payment_method, cash_counts)
 values (:'church_a', :'batch', :'giver_jane', 50, 'cash', '{"20": 2, "10": 1}') returning id as don_cash \gset
@@ -237,7 +237,7 @@ reset role;
 begin;
 set local role authenticated;
 set local request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
-insert into public.batches (church_id, batch_number) values (:'church_a', 'SAME-TXN') returning id as b2 \gset
+insert into public.batches (church_id, batch_date) values (:'church_a', '2026-11-29') returning id as b2 \gset
 insert into public.donations (church_id, batch_id, giver_id, amount, payment_method, cheque_number)
 values (:'church_a', :'b2', :'giver_jane', 25, 'cheque', '42') returning id as d2 \gset
 insert into public.donation_splits (church_id, donation_id, fund_id, amount) values (:'church_a', :'d2', :'fund_general', 25);
@@ -341,6 +341,36 @@ reset role;
 set role service_role;
 select pg_temp.expect_eq((select password from public.get_smtp_for_server(:'church_a')), 's3cret', 'server (service role) can read SMTP to send mail');
 reset role;
+
+-- ---------- batch & transaction numbering ----------
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
+select pg_temp.expect_eq((select batch_number from public.batches where id = :'batch'), '20260001', 'first batch of 2026 is 20260001');
+select pg_temp.expect_eq((select string_agg(transaction_number, ',' order by transaction_number) from public.donations where batch_id = :'batch'),
+                         '20260001000001,20260001000002', 'transactions = batch # + 6-digit sequence (deleted row 000003 not reused)');
+select pg_temp.expect_eq((select batch_number from public.batches where id = :'b2'), '20260002', 'second 2026 batch is 20260002');
+reset role;
+select pg_temp.expect_eq((select string_agg(batch_number, ',' order by batch_number) from public.batches where church_id = :'church_c'),
+                         '20260001,20260002', 'each church has its own counter (Church C starts at 0001 too)');
+select pg_temp.expect_eq((select legacy_batch_number from public.batches where church_id = :'church_c' order by batch_number limit 1),
+                         'B-1700000000000', 'imported batch keeps its old number for reference');
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
+insert into public.batches (church_id, batch_date) values (:'church_a', '2027-01-03') returning batch_number as b27 \gset
+select pg_temp.expect_eq(:'b27', '20270001', 'new year restarts at 0001');
+insert into public.batches (church_id, batch_date) values (:'church_a', '2026-12-27') returning id as b_del, batch_number as b_del_num \gset
+delete from public.batches where id = :'b_del';
+insert into public.batches (church_id, batch_date) values (:'church_a', '2026-12-28') returning batch_number as b_after \gset
+select pg_temp.expect_eq(:'b_del_num' || '->' || :'b_after', '20260004->20260005', 'deleted batch number is not reused (gap stays)');
+select pg_temp.expect_error(array[format('insert into public.batches (church_id, batch_number) values (%L, ''20269999'')', :'church_a')],
+  'permission denied', 'clients cannot choose a batch number');
+select pg_temp.expect_error(array[format('update public.batches set batch_number = ''20260099'' where id = %L', :'b2')],
+  'permission denied', 'clients cannot change a batch number');
+reset role;
+select pg_temp.expect_error(array[format('update public.donations set transaction_number = ''x'' where batch_id = %L', :'batch')],
+  'cannot be changed|finalized', 'even the database owner cannot change a transaction number');
+select pg_temp.expect_error(array[format('set local safetrack.allow_locked_changes = ''on''; update public.batches set batch_number = ''20269999'' where id = %L', :'batch')],
+  'cannot be changed', 'even an unlock override cannot renumber a batch');
 
 \echo
 \echo ALL TESTS PASSED

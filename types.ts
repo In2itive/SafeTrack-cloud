@@ -73,6 +73,7 @@ export interface DonationSplit {
 
 export interface Donation {
   id?: string;
+  transactionNumber?: string; // YYYY####NNNNNN, assigned by the server
   giverId: string;
   batchId: string;
   amount: number; // Total amount of donation
