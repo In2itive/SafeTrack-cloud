@@ -9,6 +9,7 @@
  * (supabase/functions). Email can't: Edge Functions block outbound ports 25
  * and 587, which most church mail providers require.
  */
+import 'dotenv/config'; // loads .env on any Node version
 import express, { type Request, type Response, type NextFunction } from 'express';
 import nodemailer from 'nodemailer';
 import multer from 'multer';
@@ -116,8 +117,16 @@ async function startServer() {
     app.get('*all', (_req, res) => res.sendFile(path.join(distPath, 'index.html')));
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`\n  SafeTrack is running:  http://localhost:${PORT}\n`);
+  });
+  server.on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`\n  Port ${PORT} is already in use. Close the other program or run with PORT=3001.\n`);
+    } else {
+      console.error(err);
+    }
+    process.exit(1);
   });
 }
 
