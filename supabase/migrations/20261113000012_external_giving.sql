@@ -276,7 +276,7 @@ begin
                             'already_posted', v_posted, 'refunded_after_post', v_refunded_after_post);
 end $$;
 
-revoke all on function private.stage_external_transactions(uuid, public.batch_source, jsonb) from public;
+revoke all on function private.stage_external_transactions(uuid, public.batch_source, jsonb) from public, anon, authenticated;
 
 create function public.stage_external_transactions(
   p_church_id uuid,
