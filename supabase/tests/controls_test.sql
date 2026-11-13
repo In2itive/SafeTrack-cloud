@@ -245,5 +245,102 @@ select public.finalize_batch(:'b2', '{}', 1, 25);
 select pg_temp.expect_eq((select status::text from public.batches where id = :'b2'), 'finalized', 'admin solo finalize works even in the same transaction as the edits');
 commit;
 
+-- ---------- save_batch (atomic save used by the app) ----------
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a2';
+insert into public.givers (church_id, name) values (:'church_a', 'New During Batch') returning id as g_new \gset
+select public.save_batch(:'church_a',
+  jsonb_build_object('batch_number', 'SB-1', 'batch_date', '2026-11-22'),
+  jsonb_build_array(
+    jsonb_build_object('giver_id', :'giver_jane', 'amount', 20, 'payment_method', 'cash', 'cash_counts', '{"20":1}'::jsonb,
+                       'splits', jsonb_build_array(jsonb_build_object('fund_id', :'fund_general', 'amount', 20))),
+    jsonb_build_object('giver_id', :'g_new', 'amount', 30, 'payment_method', 'cheque', 'cheque_number', '77',
+                       'splits', jsonb_build_array(jsonb_build_object('fund_id', :'fund_general', 'amount', 10),
+                                                   jsonb_build_object('fund_id', :'fund_internal', 'internal_account_id', :'acct', 'amount', 20)))),
+  '{}', array[:'g_new']::uuid[]) as sb \gset
+select (:'sb'::jsonb ->> 'batch_id') as sb_batch, (:'sb'::jsonb -> 'donation_ids' ->> 0) as sb_d1, (:'sb'::jsonb -> 'donation_ids' ->> 1) as sb_d2 \gset
+select pg_temp.expect_eq((select total_amount::text || '/' || item_count from public.batch_totals where batch_id = :'sb_batch'), '50.00/2', 'save_batch creates batch + donations + splits');
+select pg_temp.expect_eq((select created_in_batch_id::text from public.givers where id = :'g_new'), :'sb_batch', 'save_batch links newly created giver');
+
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a3';
+select pg_sleep(0.01);
+select public.sign_batch(:'sb_batch');
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a2';
+reset role;
+select count(*) as audit_before from public.audit_log \gset
+set role authenticated;
+-- identical re-save (what auto-save does): must change nothing
+select public.save_batch(:'church_a', jsonb_build_object('id', :'sb_batch', 'batch_date', '2026-11-22'),
+  jsonb_build_array(
+    jsonb_build_object('id', :'sb_d1', 'giver_id', :'giver_jane', 'amount', 20, 'payment_method', 'cash', 'cash_counts', '{"20":1}'::jsonb,
+                       'splits', jsonb_build_array(jsonb_build_object('fund_id', :'fund_general', 'amount', 20))),
+    jsonb_build_object('id', :'sb_d2', 'giver_id', :'g_new', 'amount', 30, 'payment_method', 'cheque', 'cheque_number', '77',
+                       'splits', jsonb_build_array(jsonb_build_object('fund_id', :'fund_internal', 'internal_account_id', :'acct', 'amount', 20),
+                                                   jsonb_build_object('fund_id', :'fund_general', 'amount', 10)))));
+reset role;
+select pg_temp.expect_eq((select count(*)::text from public.audit_log), :'audit_before', 'identical re-save writes nothing (no audit noise)');
+set role authenticated;
+select public.finalize_batch(:'sb_batch', '{"20":1}', 1, 30);
+select pg_temp.expect_eq((select status::text from public.batches where id = :'sb_batch'), 'finalized', 'sign-off survives an identical auto-save');
+select pg_temp.expect_error(array[format(
+  'select public.save_batch(%L, jsonb_build_object(''id'', %L), ''[]''::jsonb, array[%L]::uuid[])', :'church_a', :'sb_batch', :'sb_d1')],
+  'finalized', 'save_batch cannot touch a finalized batch');
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000b1';
+select pg_temp.expect_error(array[format(
+  'select public.save_batch(%L, jsonb_build_object(''batch_number'', ''X''), ''[]''::jsonb)', :'church_a')],
+  'row-level security', 'save_batch cannot create a batch in another church');
+reset role;
+
+-- ---------- legacy backup import ----------
+\set legacy `cat supabase/tests/legacy_backup_sample.json`
+insert into auth.users (id, email) values ('00000000-0000-0000-0000-0000000000c1', 'c1@c.test');
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000c1';
+select public.create_church('Church C', 'Carol Admin') as church_c \gset
+select public.import_legacy_backup(:'church_c', :'legacy'::jsonb) as import_result \gset
+\echo import result: :import_result
+select pg_temp.expect_eq((:'import_result'::jsonb ->> 'givers') || '/' || (:'import_result'::jsonb ->> 'batches') || '/' ||
+                         (:'import_result'::jsonb ->> 'donations') || '/' || (:'import_result'::jsonb ->> 'finalized_batches'),
+                         '3/2/3/1', 'import counts: 3 givers, 2 batches, 3 donations, 1 finalized');
+select pg_temp.expect_eq((:'import_result'::jsonb ->> 'skipped_donations_unknown_giver') || '/' ||
+                         (:'import_result'::jsonb ->> 'fixed_missing_cheque_numbers') || '/' ||
+                         (:'import_result'::jsonb ->> 'renumbered_duplicate_envelopes') || '/' ||
+                         (:'import_result'::jsonb ->> 'users_not_imported'),
+                         '1/1/1/2', 'import reports skipped/fixed/renumbered/users');
+select pg_temp.expect_eq((select string_agg(status || ':' || coalesce(array_to_string(legacy_finalized_by, '+'), '-'), ',' order by batch_date)
+                          from public.batches where church_id = :'church_c'),
+                         'finalized:Mary Teller+Joe Teller,open:-', 'finalized stays locked with original teller names');
+select pg_temp.expect_eq((select total_amount::text from public.batch_totals b join public.batches x on x.id = b.batch_id
+                          where x.church_id = :'church_c' and x.status = 'finalized'), '170.00', 'finalized batch total preserved (float noise rounded)');
+select pg_temp.expect_eq((select g.name from public.donations d join public.givers g on g.id = d.giver_id
+                          where d.church_id = :'church_c' and d.payment_method = 'cash'), 'Loose Giving', 'old giverId 0 maps to Loose Giving');
+select pg_temp.expect_eq((select string_agg(f.name || '=' || s.amount || coalesce('@' || a.code, ''), ',' order by f.name)
+                          from public.donation_splits s join public.funds f on f.id = s.fund_id
+                          left join public.internal_accounts a on a.id = s.internal_account_id
+                          where s.church_id = :'church_c'),
+                         'General=50.00,General=60.00,Internal=40.00@YOUTH,Roof Appeal=20.00', 'splits, custom fund and internal account carried over');
+select pg_temp.expect_eq((select next_envelope_number::text || '/' || array_to_string(accounting_recipients, ';') || '/' || account_of
+                          from public.church_settings where church_id = :'church_c'), '150/a@x.test;b@x.test/Grace Church', 'settings imported');
+select pg_temp.expect_eq((select has_password::text from public.get_smtp_settings(:'church_c')), 'true', 'SMTP imported server-side');
+select pg_temp.expect_eq((select g.name from public.givers g join public.batches b on b.id = g.created_in_batch_id
+                          where g.church_id = :'church_c'), 'Sam Lee', 'new-envelope tracking preserved');
+select pg_temp.expect_eq((select is_active::text from public.funds where church_id = :'church_c' and name = 'Missions'), 'false', 'fund active flag carried over');
+select pg_temp.expect_error(array[format('select public.import_legacy_backup(%L, %L::jsonb)', :'church_c', :'legacy')],
+  'already has batches', 'second import refused (no double-counting)');
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a2';
+select pg_temp.expect_error(array[format('select public.import_legacy_backup(%L, %L::jsonb)', :'church_a', :'legacy')],
+  'Only an administrator', 'teller cannot import');
+reset role;
+
+-- ---------- server-only SMTP access ----------
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
+select pg_temp.expect_error(array[format('select * from public.get_smtp_for_server(%L)', :'church_a')],
+  'permission denied', 'browser (even an admin) cannot read the SMTP password');
+reset role;
+set role service_role;
+select pg_temp.expect_eq((select password from public.get_smtp_for_server(:'church_a')), 's3cret', 'server (service role) can read SMTP to send mail');
+reset role;
+
 \echo
 \echo ALL TESTS PASSED

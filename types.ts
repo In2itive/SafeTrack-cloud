@@ -6,23 +6,22 @@ export enum UserRole {
 }
 
 export interface User {
-  id?: number;
-  username: string;
-  name: string;
+  id?: string;        // Supabase auth user id
+  name: string;       // display name within the church
   role: UserRole;
   email: string;
-  passwordHash?: string; // Simple hash for local auth
+  isActive?: boolean;
 }
 
 export interface FundEntity {
-  id?: number;
+  id?: string;
   name: string;
   isSystem: boolean; // Cannot be deleted/renamed if true
   isActive: boolean;
 }
 
 export interface InternalAccount {
-  id?: number;
+  id?: string;
   name: string;
   isActive: boolean;
 }
@@ -45,7 +44,7 @@ export enum BatchSource {
 }
 
 export interface Giver {
-  id?: number;
+  id?: string;
   envelopeNumber: number;
   
   // Identity
@@ -63,6 +62,7 @@ export interface Giver {
   eTransferId?: string; // Primary E-Transfer ID (Phone/Email)
   eTransferId2?: string; // Secondary E-Transfer ID
   pushPayId?: string;
+  isSystem?: boolean; // #0 Loose Giving, #1 Internal
 }
 
 export interface DonationSplit {
@@ -72,9 +72,9 @@ export interface DonationSplit {
 }
 
 export interface Donation {
-  id?: number;
-  giverId: number;
-  batchId: number;
+  id?: string;
+  giverId: string;
+  batchId: string;
   amount: number; // Total amount of donation
   date: string;
   paymentMethod: PaymentMethod;
@@ -85,25 +85,29 @@ export interface Donation {
 }
 
 export interface Batch {
-  id?: number;
+  id?: string;
   batchNumber: string;
   date: string;
   status: BatchStatus;
   source: BatchSource;
   totalAmount: number;
   itemCount: number;
-  newGiverIds?: number[]; // Track givers created during this batch
-  finalizedBy?: string[]; // Names of tellers who finalized the batch
+  newGiverIds?: string[]; // Givers created during this batch
+  finalizedBy?: string[]; // Names of the tellers who signed the original count
+  adjustedBy?: string[];  // Names of admins who signed later adjustments
+  revision?: number;
+}
+
+export interface SignOff {
+  revision: number;
+  name: string;
+  role: UserRole;
+  signedAt: string;
 }
 
 export interface AppSettings {
-  id?: number;
   nextEnvelopeNumber: number;
-  smtpHost?: string;
-  smtpPort?: number;
-  smtpUser?: string;
-  smtpPassword?: string;
-  smtpFrom?: string;
+  allowAdminSoloFinalize?: boolean;
   accountingRecipients?: string;
   envelopeRecipients?: string;
   depositRecipients?: string;
@@ -115,4 +119,12 @@ export interface AppSettings {
   churchAddressLine1?: string;
   churchAddressLine2?: string;
   churchAddressLine3?: string;
+}
+// SMTP settings never travel to the browser with the password.
+export interface SmtpSettings {
+  host: string;
+  port: number;
+  username: string;
+  fromAddress: string;
+  hasPassword: boolean;
 }

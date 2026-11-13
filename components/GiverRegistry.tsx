@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db, getNextEnvelopeNumber, incrementEnvelopeNumber } from '../services/db';
+import { useLive, listGivers, getNextEnvelopeNumber, addGiver, updateGiver } from '../services/repo';
 import { UserPlus, Search, User, MapPin, Mail, CreditCard, Smartphone, Pencil, Plus } from 'lucide-react';
 import { Giver } from '../types';
 
 const GiverRegistry: React.FC = () => {
-  const givers = useLiveQuery(() => db.givers.toArray());
+  const givers = useLive(listGivers);
+  const [saveError, setSaveError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [nextEnv, setNextEnv] = useState<number>(0);
   const [search, setSearch] = useState('');
@@ -56,16 +56,17 @@ const GiverRegistry: React.FC = () => {
       pushPayId: formData.pushPayId
     };
 
-    if (formData.id) {
-      // Edit Mode
-      await db.givers.update(formData.id, payload);
-    } else {
-      // Create Mode
-      await db.givers.add({
-        envelopeNumber: nextEnv,
-        ...payload
-      } as Giver);
-      await incrementEnvelopeNumber();
+ try {
+      setSaveError('');
+      if (formData.id) {
+        await updateGiver(formData.id, payload);
+      } else {
+        // The database assigns the envelope number atomically (no two tellers can get the same one)
+        await addGiver(payload as Giver);
+      }
+    } catch (err: any) {
+      setSaveError(err.message || 'Could not save giver');
+      return;
     }
     
     setShowModal(false);
@@ -199,6 +200,7 @@ const GiverRegistry: React.FC = () => {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
+              {saveError && <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm border border-red-100">{saveError}</div>}
               
               {/* Names Section */}
               <div className="space-y-4">

@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db, getNextEnvelopeNumber, incrementEnvelopeNumber } from '../services/db';
+import {
+  useLive, listGivers, getGivers, getSystemGivers, SystemGivers, listInternalAccounts, listFunds,
+  getBatch, listDonations, saveBatch, addGiver, getNextEnvelopeNumber, shortId,
+} from '../services/repo';
 import { PaymentMethod, BatchStatus, DonationSplit, Giver, Batch, BatchSource, FundEntity } from '../types';
 import { Plus, Save, Trash2, AlertCircle, Layers, Calculator, X, Check, Banknote, Search, UserPlus, AlertTriangle, ChevronDown, ArrowLeft, Users, CreditCard, Smartphone } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -9,9 +11,9 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 
 interface Row {
   id: number; // React Key (timestamp or DB ID)
-  donationId?: number; // DB ID if editing existing donation
+  donationId?: string; // DB ID if editing existing donation
   // Giver Data
-  giverId?: number; 
+  giverId?: string; 
   inputValue: string; // The text in the giver input
   // Financial Data
   amount: string;
@@ -34,12 +36,13 @@ const GiverInput: React.FC<{
   value: string;
   isLocked: boolean;
   onChange: (val: string) => void;
-  onSelect: (giver: Giver | { id: number, name: string, name2?: string, envelopeNumber: number }) => void;
+  onSelect: (giver: Giver) => void;
   onCreate: (name: string) => void;
   onClear: () => void;
   givers: Giver[];
+  systemGivers?: SystemGivers;
   autoFocus?: boolean;
-}> = ({ rowId, value, isLocked, onChange, onSelect, onCreate, onClear, givers, autoFocus }) => {
+}> = ({ rowId, value, isLocked, onChange, onSelect, onCreate, onClear, givers, systemGivers, autoFocus }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -52,11 +55,11 @@ const GiverInput: React.FC<{
     const results: any[] = [];
 
     // Special System Givers
-    if ('loose giving'.includes(term) || term === '0') {
-        results.push({ id: 0, name: 'Loose Giving', envelopeNumber: 0 });
+    if (systemGivers && ('loose giving'.includes(term) || term === '0')) {
+        results.push(systemGivers.loose);
     }
-    if ('internal'.includes(term) || term === '1') {
-        results.push({ id: -1, name: 'Internal', envelopeNumber: 1 });
+    if (systemGivers && ('internal'.includes(term) || term === '1')) {
+        results.push(systemGivers.internal);
     }
 
     // Exact envelope match first
@@ -190,7 +193,7 @@ const GiverInput: React.FC<{
 const InternalAccountInput: React.FC<{
   value: string;
   onChange: (val: string) => void;
-  accounts: { id?: number, name: string }[];
+  accounts: { id?: string, name: string }[];
 }> = ({ value, onChange, accounts }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -261,12 +264,13 @@ const BatchEntry: React.FC = () => {
   const [searchParams] = useSearchParams();
   const editBatchId = searchParams.get('batchId');
 
-  const allGivers = useLiveQuery(() => db.givers.toArray()) || [];
-  const internalAccounts = useLiveQuery(() => db.internalAccounts.toArray()) || [];
+  const allGivers = useLive(listGivers) || [];
+  const internalAccounts = (useLive(listInternalAccounts) || []).filter(a => a.isActive);
+  const systemGivers = useLive(getSystemGivers);
   
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [editingBatch, setEditingBatch] = useState<Batch | null>(null);
-  const [newGiverIds, setNewGiverIds] = useState<number[]>([]);
+  const [newGiverIds, setNewGiverIds] = useState<string[]>([]);
   
   const [rows, setRows] = useState<Row[]>([
     { 
@@ -280,7 +284,8 @@ const BatchEntry: React.FC = () => {
     }
   ]);
   
-  const [deletedRowIds, setDeletedRowIds] = useState<number[]>([]);
+  const [deletedRowIds, setDeletedRowIds] = useState<string[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
 
   // Modals
@@ -300,46 +305,49 @@ const BatchEntry: React.FC = () => {
     setAlertModal({ isOpen: true, message, onConfirm });
   };
 
+  // Batch this screen created/saved itself; no need to reload it from the server
+  const savedBatchIdRef = useRef<string | null>(null);
+
   // Load Batch Data if editing
   useEffect(() => {
     if (!editBatchId) {
       setIsLoaded(true);
       return;
     }
+    if (savedBatchIdRef.current === editBatchId) {
+      setIsLoaded(true);
+      return;
+    }
 
     const loadData = async () => {
       try {
-        const bId = parseInt(editBatchId);
-        const batch = await db.batches.get(bId);
+        const bId = editBatchId;
+        const batch = await getBatch(bId);
         if (!batch) {
           showAlert("Batch not found", () => navigate('/history'));
           return;
         }
 
-        const donations = await db.donations.where('batchId').equals(bId).toArray();
+        if (batch.status === BatchStatus.Finalized) {
+          showAlert("This batch is finalized. An administrator must unlock it before it can be edited.", () => navigate('/history'));
+          return;
+        }
+
+        const donations = await listDonations(bId);
         
         // Fetch givers to populate inputs
         const giverIds = [...new Set(donations.map(d => d.giverId))];
-        const givers = await db.givers.bulkGet(giverIds);
-        
-        const validGivers = givers.filter((g): g is Giver => !!g);
-        const giverMap = new Map<number, Giver>(validGivers.map(g => [g.id!, g]));
+        const givers = await getGivers(giverIds);
+        const giverMap = new Map<string, Giver>(givers.map(g => [g.id!, g]));
 
         const loadedRows: Row[] = donations.map(d => {
-          let g: Giver | undefined;
-          if (d.giverId === 0) {
-            g = { id: 0, name: 'Loose Giving', envelopeNumber: 0 };
-          } else if (d.giverId === -1) {
-            g = { id: -1, name: 'Internal', envelopeNumber: 1 };
-          } else {
-            g = giverMap.get(d.giverId);
-          }
+          const g = giverMap.get(d.giverId);
 
           const nameDisplay = g ? (g.name2 ? `${g.name} & ${g.name2}` : g.name) : 'Unknown';
           const envDisplay = g ? g.envelopeNumber : '0';
 
           return {
-            id: d.id!, // Use DB ID as key for existing rows
+            id: Math.random(), // React key only
             donationId: d.id,
             giverId: d.giverId,
             inputValue: `${nameDisplay} (#${envDisplay})`,
@@ -461,7 +469,7 @@ const BatchEntry: React.FC = () => {
       pendingRowRef.current = null;
     }
     if (giver.id) {
-      setNewGiverIds(prev => [...prev, giver.id as number]);
+      setNewGiverIds(prev => [...prev, giver.id as string]);
     }
     setQuickAddName(null);
   };
@@ -473,10 +481,10 @@ const BatchEntry: React.FC = () => {
   const handleSave = async (navigateAway = true): Promise<boolean> => {
     const errors: string[] = [];
     rows.forEach((r, idx) => {
-      const isEmpty = !r.giverId && r.giverId !== 0 && r.giverId !== -1 && !r.amount;
+      const isEmpty = !r.giverId && !r.amount;
       if (isEmpty) return;
 
-      if (!r.giverId && r.giverId !== 0 && r.giverId !== -1) errors.push(`Row ${idx + 1}: No Giver selected.`);
+      if (!r.giverId) errors.push(`Row ${idx + 1}: No Giver selected.`);
       if (!parseFloat(r.amount)) errors.push(`Row ${idx + 1}: Amount is 0.`);
       
       const splitTotal = r.splits.reduce((sum, s) => sum + s.amount, 0);
@@ -512,80 +520,38 @@ const BatchEntry: React.FC = () => {
       return false;
     }
 
+    if (isSaving) return false;
+    setIsSaving(true);
     try {
-      let currentBatchId = editBatchId ? parseInt(editBatchId) : undefined;
-      const newDonationIds: Record<number, number> = {};
+      let currentBatchId = editBatchId || undefined;
+      const newDonationIds: Record<number, string> = {};
 
-      // Use Dexie transaction to ensure atomicity
-      await (db as any).transaction('rw', db.batches, db.donations, async () => {
-        if (currentBatchId && editingBatch) {
-           // --- UPDATE MODE ---
-           await db.batches.update(currentBatchId, {
-             date: date,
-             totalAmount: calculateTotal(),
-             itemCount: rows.length,
-             newGiverIds: newGiverIds
-           });
+      // Rows that hold data, in screen order
+      const kept = rows.filter(row => !(!row.giverId && !parseFloat(row.amount)));
 
-           if (deletedRowIds.length > 0) {
-             await db.donations.bulkDelete(deletedRowIds);
-           }
-
-           for (const row of rows) {
-             const isEmpty = !row.giverId && row.giverId !== 0 && row.giverId !== -1 && !parseFloat(row.amount);
-             if (isEmpty) continue;
-             const amountVal = parseFloat(row.amount) || 0;
-
-             const payload = {
-                giverId: row.giverId!,
-                batchId: currentBatchId,
-                amount: amountVal,
-                date: date,
-                paymentMethod: row.method,
-                chequeNumber: row.method === PaymentMethod.Cheque ? row.chequeNumber : undefined,
-                splits: row.splits,
-                cashCounts: row.method === PaymentMethod.Cash ? row.cashCounts : undefined
-             };
-
-             if (row.donationId) {
-               await db.donations.update(row.donationId, payload);
-             } else {
-               const newId = await db.donations.add(payload);
-               newDonationIds[row.id] = newId as number;
-             }
-           }
-        } else {
-           // --- CREATE MODE ---
-           const newBatchId = await db.batches.add({
-             batchNumber: `B-${Date.now()}`,
-             date: date,
-             status: BatchStatus.Open,
-             source: BatchSource.InPerson,
-             totalAmount: calculateTotal(),
-             itemCount: rows.length,
-             newGiverIds: newGiverIds
-           });
-           currentBatchId = newBatchId as number;
-
-           for (const row of rows) {
-             const isEmpty = !row.giverId && row.giverId !== 0 && row.giverId !== -1 && !parseFloat(row.amount);
-             if (isEmpty) continue;
-             const amountVal = parseFloat(row.amount) || 0;
-             
-             const newId = await db.donations.add({
-               giverId: row.giverId!,
-               batchId: currentBatchId,
-               amount: amountVal,
-               date: date,
-               paymentMethod: row.method,
-               chequeNumber: row.method === PaymentMethod.Cheque ? row.chequeNumber : undefined,
-               splits: row.splits,
-               cashCounts: row.method === PaymentMethod.Cash ? row.cashCounts : undefined
-             });
-             newDonationIds[row.id] = newId as number;
-           }
-        }
+      // One atomic server call: batch + donations + splits, or nothing.
+      const result = await saveBatch({
+        batchId: currentBatchId,
+        date,
+        source: editingBatch?.source,
+        rows: kept.map(row => ({
+          donationId: row.donationId,
+          giverId: row.giverId!,
+          amount: parseFloat(row.amount) || 0,
+          method: row.method,
+          chequeNumber: row.method === PaymentMethod.Cheque ? row.chequeNumber : undefined,
+          splits: row.splits,
+          cashCounts: row.method === PaymentMethod.Cash ? row.cashCounts : undefined,
+        })),
+        deletedDonationIds: deletedRowIds,
+        newGiverIds,
       });
+      currentBatchId = result.batchId;
+      savedBatchIdRef.current = result.batchId;
+      kept.forEach((row, i) => { if (!row.donationId) newDonationIds[row.id] = result.donationIds[i]; });
+      if (!editingBatch) {
+        setEditingBatch({ id: result.batchId } as Batch);
+      }
       
       if (Object.keys(newDonationIds).length > 0) {
          setRows(prev => prev.map(r => newDonationIds[r.id] ? { ...r, donationId: newDonationIds[r.id] } : r));
@@ -600,10 +566,12 @@ const BatchEntry: React.FC = () => {
         }
       }
       return true;
-    } catch (err) {
+    } catch (err: any) {
       console.error("Batch Save Error:", err);
-      showAlert("Failed to save batch. See console for details.");
+      showAlert("Failed to save batch: " + (err.message || 'unknown error'));
       return false;
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -639,7 +607,7 @@ const BatchEntry: React.FC = () => {
                 </button>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h2 className="text-3xl font-bold text-gray-800">Edit Batch #{editBatchId}</h2>
+                    <h2 className="text-3xl font-bold text-gray-800">Edit Batch #{shortId(editBatchId)}</h2>
                     {editingBatch && (
                       <span className="flex items-center gap-1 bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded-full font-bold border border-gray-200">
                         {getSourceIcon(editingBatch.source)} {editingBatch.source}
@@ -709,6 +677,7 @@ const BatchEntry: React.FC = () => {
                         onCreate={(name) => handleCreateGiverStart(row.id, name)}
                         onClear={() => updateRow(row.id, { giverId: undefined, inputValue: '' })}
                         givers={allGivers}
+                        systemGivers={systemGivers}
                         autoFocus={index === rows.length - 1 && index > 0}
                       />
                     </td>
@@ -903,6 +872,7 @@ const BatchEntry: React.FC = () => {
 const QuickAddGiverModal: React.FC<{ name: string, onClose: () => void, onSave: (g: Giver) => void }> = ({ name, onClose, onSave }) => {
   const [nextEnv, setNextEnv] = useState<number>(0);
   const [address, setAddress] = useState<string>('');
+  const [error, setError] = useState('');
   
   useEffect(() => {
     getNextEnvelopeNumber().then(setNextEnv).catch(err => console.error("Failed to get next envelope:", err));
@@ -910,19 +880,12 @@ const QuickAddGiverModal: React.FC<{ name: string, onClose: () => void, onSave: 
 
   const handleConfirm = async () => {
     try {
-      const id = await db.givers.add({
-        envelopeNumber: nextEnv,
-        name: name,
-        email: '',
-        address1: address,
-      });
-      await incrementEnvelopeNumber();
-      onSave({ id: id as number, envelopeNumber: nextEnv, name, address1: address });
-    } catch (err) {
+      // The server assigns the envelope number atomically; show what it actually gave.
+      const giver = await addGiver({ name, address1: address || undefined } as Giver);
+      onSave(giver);
+    } catch (err: any) {
       console.error("Failed to create giver:", err);
-      // We can't use showAlert here because it's not passed down.
-      // But we can log it and maybe show a simple error message in the modal if we had state for it.
-      // For now, let's just log it to prevent uncaught promise rejection.
+      setError(err.message || 'Could not create giver');
     }
   };
 
@@ -935,6 +898,7 @@ const QuickAddGiverModal: React.FC<{ name: string, onClose: () => void, onSave: 
           <p className="text-xl font-bold text-gray-800">{name}</p>
           <p className="text-sm text-church-500 font-bold mt-1">Assigning Envelope #{nextEnv}</p>
         </div>
+        {error && <div className="bg-red-50 text-red-600 p-2 rounded-lg text-sm mb-4">{error}</div>}
         
         <div className="mb-4">
           <label className="block text-sm font-bold text-gray-700 mb-1">Address (Optional)</label>
@@ -981,7 +945,7 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode, fallbac
   }
 }
 
-const SplitModal: React.FC<{ row: Row, internalAccounts: { id?: number, name: string }[], onClose: () => void, onSave: (s: DonationSplit[]) => void }> = ({ row, internalAccounts, onClose, onSave }) => {
+const SplitModal: React.FC<{ row: Row, internalAccounts: { id?: string, name: string }[], onClose: () => void, onSave: (s: DonationSplit[]) => void }> = ({ row, internalAccounts, onClose, onSave }) => {
   // Safety check: ensure row and splits exist
   const initialSplits = row && Array.isArray(row.splits) ? row.splits : [{ fund: 'General', amount: 0 }];
   
@@ -996,10 +960,7 @@ const SplitModal: React.FC<{ row: Row, internalAccounts: { id?: number, name: st
   const totalAmount = parseFloat(row.amount) || 0;
   
   // Fetch active funds
-  const funds = useLiveQuery(async () => {
-    const allFunds = await db.funds.toArray();
-    return allFunds.filter(f => f.isActive);
-  }) || [];
+  const funds = (useLive(listFunds) || []).filter(f => f.isActive);
   
   // Recalculate remaining logic
   const currentAllocated = splits.reduce((sum, s) => {

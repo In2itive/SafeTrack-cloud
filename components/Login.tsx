@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { Lock, User, LogIn, Users } from 'lucide-react';
+import { Lock, Mail, LogIn, Users } from 'lucide-react';
 
-const Login = () => {
+const Login: React.FC<{ onCreateChurch?: () => void }> = ({ onCreateChurch }) => {
   const { login, user, logout } = useAuth();
   const [formData, setFormData] = useState({
-    username: '',
+    email: '',
     password: ''
   });
   const [error, setError] = useState('');
@@ -17,11 +17,12 @@ const Login = () => {
     setError('');
     
     try {
-      const success = await login(formData.username, formData.password);
-      if (!success) {
-        setError("Invalid username or password");
+      const result = await login(formData.email, formData.password);
+      if (!result.ok) {
+        setError(result.error || "Invalid email or password");
+        setFormData(f => ({ ...f, password: '' }));
       } else {
-        setFormData({ username: '', password: '' });
+        setFormData({ email: '', password: '' });
       }
     } catch (err) {
       setError("An error occurred during login");
@@ -60,20 +61,25 @@ const Login = () => {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        {/* autoComplete off: several tellers share one laptop; the browser must not offer saved logins */}
+        <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
           <div>
             <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">
-              {isSecondaryLogin ? 'Second Teller Username' : 'Username'}
+              {isSecondaryLogin ? 'Second Teller Email' : 'Email'}
             </label>
             <div className="relative">
-              <User className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
+              <Mail className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
               <input
-                type="text"
+                type="email"
+                name={isSecondaryLogin ? 'st-second-email' : 'st-email'}
+                autoComplete="off"
+                autoCapitalize="none"
+                spellCheck={false}
                 required
                 className="w-full pl-10 p-3 rounded-xl border border-gray-400 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-church-500 outline-none transition-all"
-                placeholder={isSecondaryLogin ? "Enter second username" : "Enter your username"}
-                value={formData.username}
-                onChange={e => setFormData({...formData, username: e.target.value})}
+                placeholder={isSecondaryLogin ? "Second teller's email" : "you@church.org"}
+                value={formData.email}
+                onChange={e => setFormData({...formData, email: e.target.value})}
               />
             </div>
           </div>
@@ -84,6 +90,8 @@ const Login = () => {
               <Lock className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
               <input
                 type="password"
+                name={isSecondaryLogin ? 'st-second-pass' : 'st-pass'}
+                autoComplete="new-password"
                 required
                 className="w-full pl-10 p-3 rounded-xl border border-gray-400 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-church-500 outline-none transition-all"
                 placeholder="••••••••"
@@ -105,6 +113,15 @@ const Login = () => {
             )}
           </button>
         </form>
+
+        {!isSecondaryLogin && onCreateChurch && (
+          <p className="text-center text-sm text-gray-500 mt-6">
+            New to SafeTrack?{' '}
+            <button onClick={onCreateChurch} className="text-church-600 font-semibold hover:underline">
+              Set up your church
+            </button>
+          </p>
+        )}
       </div>
     </div>
   );

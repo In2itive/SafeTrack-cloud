@@ -1,15 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../services/db';
+import { useLive, listAllDonations, countGivers, countBatches } from '../services/repo';
 import { generateFinancialInsight } from '../services/geminiService';
 import { Donation } from '../types';
 import { TrendingUp, Users, Wallet, Archive, Sparkles } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 const Dashboard: React.FC = () => {
-  const donations = useLiveQuery(() => db.donations.toArray());
-  const giversCount = useLiveQuery(() => db.givers.count());
-  const batchesCount = useLiveQuery(() => db.batches.count());
+  const donations = useLive(listAllDonations);
+  const giversCount = useLive(countGivers);
+  const batchesCount = useLive(countBatches);
   
   const [insight, setInsight] = useState<string>("Analyzing vault data...");
   const [totalValue, setTotalValue] = useState(0);
@@ -21,7 +20,7 @@ const Dashboard: React.FC = () => {
 
       // Only call AI if we have data to analyze to save tokens/calls
       if (donations.length > 0) {
-        generateFinancialInsight(total, batchesCount || 0, donations.slice(-5))
+        generateFinancialInsight(total, batchesCount || 0, donations.length)
           .then(setInsight);
       } else {
         setInsight("Vault is empty. Start by adding a batch.");
@@ -31,7 +30,7 @@ const Dashboard: React.FC = () => {
 
   // Prepare chart data (Last 5 donations for visual)
   const chartData = donations?.slice(-7).map((d, i) => ({
-    name: `Tx ${d.id}`,
+    name: `Tx ${i + 1}`,
     amount: d.amount,
   })) || [];
 

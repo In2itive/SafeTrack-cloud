@@ -13,25 +13,21 @@ import UserManagement from './components/UserManagement';
 import Login from './components/Login';
 import InitialSetup from './components/InitialSetup';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { initDatabase } from './services/db';
 
 const AppContent: React.FC = () => {
-  const { user, isAuthenticated, isLoading, isSetupRequired } = useAuth();
-
-  React.useEffect(() => {
-    initDatabase();
-  }, []);
+  const { user, isAuthenticated, isLoading, needsChurch } = useAuth();
+  const [creatingChurch, setCreatingChurch] = React.useState(false);
 
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center bg-gray-100 text-gray-500">Loading Vault...</div>;
   }
 
-  if (isSetupRequired) {
-    return <InitialSetup />;
+  if (needsChurch || (creatingChurch && !user)) {
+    return <InitialSetup onBack={() => setCreatingChurch(false)} />;
   }
 
   if (!isAuthenticated) {
-    return <Login />;
+    return <Login onCreateChurch={() => setCreatingChurch(true)} />;
   }
 
   return (

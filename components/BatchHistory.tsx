@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../services/db';
+import { useLive, listBatches, listDonations, finalizeBatch, unlockBatch, deleteBatch, signAsSecondTeller, shortId } from '../services/repo';
 import { BatchStatus, PaymentMethod, BatchSource, UserRole } from '../types';
 import { FileText, Lock, CheckCircle, Banknote, ScrollText, Unlock, AlertTriangle, X, ShieldAlert, Edit, Smartphone, CreditCard, Users, FileSpreadsheet, Trash2, Mail } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -12,8 +11,10 @@ import DepositSlip, { ReportRef as DepositRef } from './DepositSlip';
 const BatchHistory: React.FC = () => {
   const navigate = useNavigate();
   const { user, secondaryUser } = useAuth();
-  const batches = useLiveQuery(() => db.batches.orderBy('date').reverse().toArray());
-  const [selectedBatchId, setSelectedBatchId] = useState<number | null>(null);
+  const batches = useLive(listBatches);
+  const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
+  const [unlockReason, setUnlockReason] = useState('');
+  const [isFinalizing, setIsFinalizing] = useState(false);
   
   // Modals State
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -27,9 +28,7 @@ const BatchHistory: React.FC = () => {
   const depositRef = React.useRef<DepositRef>(null);
 
   // Fetch donations for the active batch for audit calculations
-  const donations = useLiveQuery(() => 
-    selectedBatchId ? db.donations.where('batchId').equals(selectedBatchId).toArray() : Promise.resolve([])
-  , [selectedBatchId]);
+  const donations = useLive(() => selectedBatchId ? listDonations(selectedBatchId) : Promise.resolve([]), [selectedBatchId]);
 
   const activeBatch = batches?.find(b => b.id === selectedBatchId);
 
@@ -134,31 +133,37 @@ const BatchHistory: React.FC = () => {
 
   const executeFinalization = async () => {
     if (selectedBatchId) {
+      setIsFinalizing(true);
       try {
-        const finalizedBy = [user?.name || 'Unknown'];
+        // The second teller signs with their own session first; then the
+        // server re-runs the blind audit and the dual-control rule before locking.
         if (secondaryUser) {
-          finalizedBy.push(secondaryUser.name);
+          await signAsSecondTeller(selectedBatchId);
         }
-        await db.batches.update(selectedBatchId, { 
-          status: BatchStatus.Finalized,
-          finalizedBy
-        });
+        await finalizeBatch(selectedBatchId, cashCounts,
+          parseInt(userCheckCount || '0'), parseFloat(userCheckAmount || '0'));
         setShowConfirmModal(false);
-      } catch (err) {
+      } catch (err: any) {
         console.error("Failed to finalize", err);
-        setAuditError("System error occurred while updating batch.");
+        setShowConfirmModal(false);
+        setAuditError(err.message || "System error occurred while finalizing batch.");
+      } finally {
+        setIsFinalizing(false);
       }
     }
   };
 
   const executeUnlock = async () => {
     if (selectedBatchId && user?.role === UserRole.Administrator) {
+      if (!unlockReason.trim()) return;
       try {
-        await db.batches.update(selectedBatchId, { status: BatchStatus.Open });
+        await unlockBatch(selectedBatchId, unlockReason.trim());
         setShowUnlockModal(false);
-      } catch (err) {
+        setUnlockReason('');
+      } catch (err: any) {
         console.error("Failed to unlock", err);
-        setAuditError("System error occurred while unlocking batch.");
+        setShowUnlockModal(false);
+        setAuditError(err.message || "System error occurred while unlocking batch.");
       }
     }
   };
@@ -166,15 +171,12 @@ const BatchHistory: React.FC = () => {
   const handleDeleteBatch = async () => {
     if (selectedBatchId) {
       try {
-        await db.transaction('rw', db.batches, db.donations, async () => {
-          await db.donations.where('batchId').equals(selectedBatchId).delete();
-          await db.batches.delete(selectedBatchId);
-        });
+        await deleteBatch(selectedBatchId);
         setSelectedBatchId(null);
         setShowDeleteModal(false);
-      } catch (err) {
+      } catch (err: any) {
         console.error("Failed to delete batch", err);
-        setAuditError("System error occurred while deleting batch.");
+        setAuditError(err.message || "System error occurred while deleting batch.");
       }
     }
   };
@@ -222,7 +224,7 @@ const BatchHistory: React.FC = () => {
               }`}
             >
               <div className="flex justify-between items-center mb-2">
-                <span className="font-bold">Batch #{batch.id}</span>
+                <span className="font-bold">Batch #{shortId(batch.id)}</span>
                 <span className={`text-xs px-2 py-1 rounded-full font-bold ${
                   batch.status === BatchStatus.Finalized ? 'bg-green-400 text-green-900' : 'bg-yellow-400 text-yellow-900'
                 }`}>
@@ -251,7 +253,7 @@ const BatchHistory: React.FC = () => {
                <div className="p-6 border-b border-gray-100 bg-gray-50/50">
                  <div className="flex justify-between items-start mb-4">
                    <div>
-                     <h3 className="text-2xl font-bold text-gray-800">Batch #{activeBatch.id}</h3>
+                     <h3 className="text-2xl font-bold text-gray-800">Batch #{shortId(activeBatch.id)}</h3>
                      <div className="flex gap-2 mb-1 mt-1">
                         <span className="flex items-center gap-1 bg-white px-2 py-0.5 rounded border border-gray-200 text-xs font-bold text-gray-600">
                            {getSourceIcon(activeBatch.source)} {activeBatch.source}
@@ -526,7 +528,7 @@ const BatchHistory: React.FC = () => {
                <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mb-4">
                  <Lock className="w-8 h-8 text-yellow-600" />
                </div>
-               <h3 className="text-xl font-bold text-gray-800 mb-2">Finalize Batch #{selectedBatchId}?</h3>
+               <h3 className="text-xl font-bold text-gray-800 mb-2">Finalize Batch #{shortId(selectedBatchId)}?</h3>
                <p className="text-gray-500 mb-6 text-sm">
                  This action will <strong>permanently lock</strong> these donations and the audit record. You cannot edit this batch after finalizing.
                </p>
@@ -539,9 +541,10 @@ const BatchHistory: React.FC = () => {
                  </button>
                  <button 
                    onClick={executeFinalization}
-                   className="flex-1 py-3 bg-church-900 text-white font-bold rounded-xl hover:bg-church-800 shadow-lg transition-transform active:scale-95"
+                   disabled={isFinalizing}
+                   className="flex-1 py-3 bg-church-900 text-white font-bold rounded-xl hover:bg-church-800 shadow-lg transition-transform active:scale-95 disabled:opacity-50"
                  >
-                   Confirm & Lock
+                   {isFinalizing ? 'Locking…' : 'Confirm & Lock'}
                  </button>
                </div>
             </div>
@@ -557,7 +560,7 @@ const BatchHistory: React.FC = () => {
                <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
                  <AlertTriangle className="w-8 h-8 text-red-600" />
                </div>
-               <h3 className="text-xl font-bold text-gray-800 mb-2">Delete Batch #{selectedBatchId}?</h3>
+               <h3 className="text-xl font-bold text-gray-800 mb-2">Delete Batch #{shortId(selectedBatchId)}?</h3>
                <p className="text-gray-500 mb-6 text-sm">
                  Are you sure you want to delete this batch? This action <strong>cannot be undone</strong> and will remove all associated donation records.
                </p>
@@ -588,10 +591,18 @@ const BatchHistory: React.FC = () => {
                <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mb-4">
                  <Unlock className="w-8 h-8 text-yellow-600" />
                </div>
-               <h3 className="text-xl font-bold text-gray-800 mb-2">Unlock Batch #{selectedBatchId}?</h3>
-               <p className="text-gray-500 mb-6 text-sm">
-                 This will reopen the batch for editing. Only Administrators can perform this action.
+               <h3 className="text-xl font-bold text-gray-800 mb-2">Unlock Batch #{shortId(selectedBatchId)}?</h3>
+               <p className="text-gray-500 mb-4 text-sm">
+                 This reopens the batch for editing. The original tellers' sign-offs stay on record,
+                 and an administrator must sign off when it is finalized again.
                </p>
+               <textarea
+                 className="w-full p-3 mb-6 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-yellow-500 outline-none"
+                 rows={2}
+                 placeholder="Reason for the adjustment (required, kept in the audit log)"
+                 value={unlockReason}
+                 onChange={e => setUnlockReason(e.target.value)}
+               />
                <div className="flex gap-3 w-full">
                  <button 
                    onClick={() => setShowUnlockModal(false)}
@@ -601,7 +612,8 @@ const BatchHistory: React.FC = () => {
                  </button>
                  <button 
                    onClick={executeUnlock}
-                   className="flex-1 py-3 bg-yellow-600 text-white font-bold rounded-xl hover:bg-yellow-700 shadow-lg transition-transform active:scale-95"
+                   disabled={!unlockReason.trim()}
+                   className="flex-1 py-3 disabled:opacity-50 bg-yellow-600 text-white font-bold rounded-xl hover:bg-yellow-700 shadow-lg transition-transform active:scale-95"
                  >
                    Confirm Unlock
                  </button>
