@@ -13,8 +13,8 @@ type Table<R, Required extends keyof R = never> = {
 
 export type MemberRole = 'administrator' | 'treasurer' | 'envelope' | 'teller';
 export type BatchStatusDb = 'open' | 'finalized';
-export type BatchSourceDb = 'in_person' | 'e_transfer' | 'pushpay';
-export type PaymentMethodDb = 'cash' | 'cheque' | 'e_transfer';
+export type BatchSourceDb = 'in_person' | 'e_transfer' | 'pushpay' | 'stripe';
+export type PaymentMethodDb = 'cash' | 'cheque' | 'e_transfer' | 'card' | 'bank_debit' | 'online';
 
 export interface ChurchRow { id: string; name: string; created_at: string; created_by: string | null }
 export interface MemberRow {
@@ -58,6 +58,19 @@ export interface AuditRow {
 }
 export interface BatchTotalsRow { batch_id: string | null; church_id: string | null; total_amount: number | null; item_count: number | null }
 
+export type GiftStatusDb = 'succeeded' | 'pending' | 'failed' | 'refunded';
+export interface ExternalTransactionRow {
+  id: string; church_id: string; provider: BatchSourceDb; external_id: string; gift_date: string;
+  amount: number; fee: number; currency: string | null; payment_method: PaymentMethodDb; status: GiftStatusDb;
+  payer_external_id: string | null; payer_envelope: number | null; payer_first_name: string | null; payer_last_name: string | null;
+  payer_name: string | null; payer_email: string | null; payer_phone: string | null; payer_address: string | null;
+  fund_key: string | null; fund_name: string | null; memo: string | null; deposit_ref: string | null; raw: Json;
+  giver_id: string | null; fund_id: string | null; ignored: boolean; donation_id: string | null;
+  posted_at: string | null; staged_by: string | null; staged_at: string; updated_at: string;
+}
+export interface GiverExternalIdRow { church_id: string; provider: BatchSourceDb; external_id: string; giver_id: string; updated_at: string }
+export interface ExternalFundMapRow { church_id: string; provider: BatchSourceDb; external_key: string; fund_id: string; updated_at: string }
+
 export type Database = {
   public: {
     Tables: {
@@ -74,6 +87,9 @@ export type Database = {
       batch_finalizations: Table<{ id: string; church_id: string; batch_id: string; revision: number; finalized_by: string; finalized_at: string; audit_cash_counts: Json; audit_cheque_count: number; audit_cheque_total: number; system_total: number }>;
       batch_unlocks: Table<{ id: string; church_id: string; batch_id: string; from_revision: number; unlocked_by: string; reason: string; unlocked_at: string }>;
       audit_log: Table<AuditRow>;
+      external_transactions: Table<ExternalTransactionRow>;
+      giver_external_ids: Table<GiverExternalIdRow>;
+      external_fund_map: Table<ExternalFundMapRow>;
     };
     Views: {
       batch_totals: { Row: BatchTotalsRow; Relationships: [] };
@@ -86,6 +102,8 @@ export type Database = {
       save_batch: { Args: { p_church_id: string; p_batch: Json; p_donations: Json; p_deleted_ids?: string[]; p_new_giver_ids?: string[] }; Returns: Json };
       import_legacy_backup: { Args: { p_church_id: string; p_data: Json }; Returns: Json };
       set_smtp_settings: { Args: { p_church_id: string; p_host: string; p_port: number; p_username: string; p_password: string | null; p_from_address: string }; Returns: undefined };
+      stage_external_transactions: { Args: { p_church_id: string; p_provider: BatchSourceDb; p_rows: Json }; Returns: Json };
+      post_external_batch: { Args: { p_church_id: string; p_provider: BatchSourceDb; p_ids: string[]; p_batch_date?: string | null; p_resolutions?: Json }; Returns: Json };
       get_smtp_settings: { Args: { p_church_id: string }; Returns: { host: string; port: number; username: string; from_address: string; has_password: boolean }[] };
     };
     Enums: {

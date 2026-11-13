@@ -27,6 +27,7 @@ const churchId = (): string => {
   if (!currentChurchId) throw new Error('No church selected');
   return currentChurchId;
 };
+export const requireChurchId = churchId;
 
 // ---------------------------------------------------------------------------
 // Change notifications (replaces Dexie's useLiveQuery)
@@ -74,17 +75,19 @@ const roleFromDb: Record<MemberRole, UserRole> = {
 export const roleToDb = (r: UserRole): MemberRole =>
   (Object.entries(roleFromDb).find(([, v]) => v === r)?.[0] ?? 'teller') as MemberRole;
 
-const methodFromDb: Record<PaymentMethodDb, PaymentMethod> = {
+export const methodFromDb: Record<PaymentMethodDb, PaymentMethod> = {
   cash: PaymentMethod.Cash, cheque: PaymentMethod.Cheque, e_transfer: PaymentMethod.ETransfer,
+  card: PaymentMethod.Card, bank_debit: PaymentMethod.BankDebit, online: PaymentMethod.Online,
 };
 const methodToDb = (m: PaymentMethod): PaymentMethodDb =>
-  m === PaymentMethod.Cash ? 'cash' : m === PaymentMethod.ETransfer ? 'e_transfer' : 'cheque';
+  (Object.entries(methodFromDb).find(([, v]) => v === m)?.[0] ?? 'cheque') as PaymentMethodDb;
 
 const sourceFromDb: Record<BatchSourceDb, BatchSource> = {
   in_person: BatchSource.InPerson, e_transfer: BatchSource.ETransfer, pushpay: BatchSource.PushPay,
+  stripe: BatchSource.Stripe,
 };
 const sourceToDb = (s?: BatchSource): BatchSourceDb =>
-  s === BatchSource.ETransfer ? 'e_transfer' : s === BatchSource.PushPay ? 'pushpay' : 'in_person';
+  (Object.entries(sourceFromDb).find(([, v]) => v === s)?.[0] ?? 'in_person') as BatchSourceDb;
 
 // ---------------------------------------------------------------------------
 // Membership / church setup

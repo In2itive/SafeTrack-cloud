@@ -29,8 +29,14 @@ export interface InternalAccount {
 export enum PaymentMethod {
   Cash = 'Cash',
   Cheque = 'Cheque',
-  ETransfer = 'E-Transfer'
+  ETransfer = 'E-Transfer',
+  Card = 'Card',
+  BankDebit = 'Bank Debit',
+  Online = 'Online'
 }
+
+/** Methods that are counted by tellers (and need a cash/cheque audit). */
+export const isCountedMethod = (m: PaymentMethod) => m === PaymentMethod.Cash || m === PaymentMethod.Cheque;
 
 export enum BatchStatus {
   Open = 'Open',
@@ -40,8 +46,12 @@ export enum BatchStatus {
 export enum BatchSource {
   InPerson = 'In-Person',
   ETransfer = 'E-Transfer',
-  PushPay = 'PushPay'
+  PushPay = 'PushPay',
+  Stripe = 'Stripe'
 }
+
+/** Batches built from a giving provider's data rather than counted by tellers. */
+export const isProviderSource = (s?: BatchSource) => s === BatchSource.PushPay || s === BatchSource.Stripe;
 
 export interface Giver {
   id?: string;
