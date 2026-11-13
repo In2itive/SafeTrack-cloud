@@ -46,7 +46,7 @@ jobs:
         run: |
           for fn in $(ls -d supabase/functions/*/ | xargs -n1 basename | grep -v '^_'); do
             echo "Deploying $fn"
-            supabase functions deploy "$fn" --project-ref "$PROJECT_REF" --use-api
+            supabase functions deploy "$fn" --remote "$PROJECT_REF" --use-api --yes
           done
 
       - name: Smoke test (functions respond, reject anonymous calls)
