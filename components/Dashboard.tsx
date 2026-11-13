@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { formatDate } from '../utils/date';
 import { useLive, listAllDonations, countGivers, countBatches } from '../services/repo';
 import { generateFinancialInsight } from '../services/geminiService';
 import { Donation } from '../types';
@@ -127,7 +128,7 @@ const Dashboard: React.FC = () => {
                <div key={d.id} className="flex justify-between items-center p-3 hover:bg-gray-50 rounded-xl transition-colors border-b border-gray-50 last:border-0">
                  <div>
                    <p className="font-semibold text-gray-800">Donation #{d.id}</p>
-                   <p className="text-xs text-gray-500">{new Date(d.date).toLocaleDateString()}</p>
+                   <p className="text-xs text-gray-500">{formatDate(d.date)}</p>
                  </div>
                  <span className="font-bold text-church-900 bg-blue-50 px-3 py-1 rounded-lg">
                    ${d.amount.toFixed(2)}

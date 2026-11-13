@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { formatDate } from '../utils/date';
 import { useLive, listBatches, listDonations, finalizeBatch, unlockBatch, deleteBatch, signAsSecondTeller, shortId } from '../services/repo';
 import { BatchStatus, PaymentMethod, BatchSource, UserRole } from '../types';
 import { FileText, Lock, CheckCircle, Banknote, ScrollText, Unlock, AlertTriangle, X, ShieldAlert, Edit, Smartphone, CreditCard, Users, FileSpreadsheet, Trash2, Mail } from 'lucide-react';
@@ -239,7 +240,7 @@ const BatchHistory: React.FC = () => {
                 </div>
 
                 <div className="flex justify-between text-sm opacity-80">
-                  <span>{new Date(batch.date).toLocaleDateString()}</span>
+                  <span>{formatDate(batch.date)}</span>
                   <span className="font-mono font-bold">${batch.totalAmount.toFixed(2)}</span>
                 </div>
               </div>
@@ -325,7 +326,7 @@ const BatchHistory: React.FC = () => {
                     <span className="flex items-center gap-1 bg-white px-2 py-1 rounded-md border border-gray-200 text-xs font-bold text-gray-600 shadow-sm">
                         {getSourceIcon(activeBatch.source)} {activeBatch.source}
                     </span>
-                    <span className="text-gray-500">Date: <span className="font-semibold text-gray-800">{new Date(activeBatch.date).toLocaleDateString()}</span></span>
+                    <span className="text-gray-500">Date: <span className="font-semibold text-gray-800">{formatDate(activeBatch.date)}</span></span>
                     <div className="w-px h-4 bg-gray-200"></div>
                     <span className="text-gray-500">Total: <span className="font-bold text-church-900">${activeBatch.totalAmount.toFixed(2)}</span></span>
                  </div>

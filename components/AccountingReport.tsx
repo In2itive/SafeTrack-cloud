@@ -1,4 +1,5 @@
 import React, { useRef, useState, forwardRef, useImperativeHandle } from 'react';
+import { formatDate } from '../utils/date';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useLive, getSettings, getBatch, listDonations, getGivers, shortId } from '../services/repo';
 import { ArrowLeft, Printer, FileSpreadsheet, Download, Mail } from 'lucide-react';
@@ -152,7 +153,7 @@ const AccountingReport = forwardRef<ReportRef, AccountingReportProps>(({ batchId
               <h1 className="text-3xl font-bold text-gray-900 uppercase tracking-wider mb-2 print:text-2xl">Accounting Summary</h1>
               <div className="text-sm font-medium text-gray-600 print:text-xs">
                 <p>Batch #: <span className="font-bold text-gray-900">{shortId(batch.id)}</span></p>
-                <p>Date: <span className="font-bold text-gray-900">{new Date(batch.date).toLocaleDateString()}</span></p>
+                <p>Date: <span className="font-bold text-gray-900">{formatDate(batch.date)}</span></p>
                 <p>Source: <span className="font-bold text-gray-900">{batch.source}</span></p>
                 <p>Tellers: <span className="font-bold text-gray-900">
                   {batch.finalizedBy?.join(', ') || 'Not Finalized'}{batch.adjustedBy?.length ? ` · Adj: ${batch.adjustedBy.join(', ')}` : ''}

@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef, forwardRef, useImperativeHandle } from 'react';
+import { formatDate } from '../utils/date';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useLive, getSettings, getBatch, listDonations, getGivers, shortId } from '../services/repo';
 import { PaymentMethod, Giver } from '../types';
@@ -196,7 +197,7 @@ const DepositSlip = forwardRef<ReportRef, DepositSlipProps>(({ batchIdProp, hidd
               <p>{settings?.churchAddressLine3 || '________________________'}</p>
             </div>
             <div className="mt-4 text-sm">
-              <p>Date: <span className="font-bold">{new Date(batch.date).toLocaleDateString()}</span></p>
+              <p>Date: <span className="font-bold">{formatDate(batch.date)}</span></p>
               <p>Batch #: <span className="font-bold">{batch.id}</span></p>
             </div>
           </div>
