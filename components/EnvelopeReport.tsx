@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, forwardRef, useImperativeHandle } from 'react';
 import { formatDate } from '../utils/date';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useLive, getSettings, getBatch, listDonations, getGivers, shortId } from '../services/repo';
+import { useLive, getSettings, getBatch, listDonations, getGivers, batchLabel } from '../services/repo';
 import { PaymentMethod, Giver, Donation } from '../types';
 import { ArrowLeft, Printer, Users, Download, Mail } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
@@ -64,7 +64,7 @@ const EnvelopeReport = forwardRef<ReportRef, EnvelopeReportProps>(({ batchIdProp
     const element = reportRef.current;
     const opt = {
       margin: 10,
-      filename: `EnvelopeReport_Batch${shortId(batch.id)}_${new Date().toISOString().split('T')[0]}.pdf`,
+      filename: `EnvelopeReport_Batch${batchLabel(batch)}_${new Date().toISOString().split('T')[0]}.pdf`,
       image: { type: 'jpeg' as const, quality: 0.98 },
       html2canvas: { scale: 2, useCORS: true },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const }
@@ -80,7 +80,7 @@ const EnvelopeReport = forwardRef<ReportRef, EnvelopeReportProps>(({ batchIdProp
     setIsGenerating(true);
 
     const element = reportRef.current;
-    const filename = `EnvelopeReport_Batch${shortId(batch.id)}_${new Date().toISOString().split('T')[0]}.pdf`;
+    const filename = `EnvelopeReport_Batch${batchLabel(batch)}_${new Date().toISOString().split('T')[0]}.pdf`;
     const opt = {
       margin: 10,
       filename,
@@ -92,7 +92,7 @@ const EnvelopeReport = forwardRef<ReportRef, EnvelopeReportProps>(({ batchIdProp
     try {
       const pdfBlob = await html2pdf().set(opt).from(element).output('blob');
       const timestamp = new Date().getTime();
-      const safeFilename = `Batch_${shortId(batch.id)}_Envelopes_${timestamp}.pdf`;
+      const safeFilename = `Batch_${batchLabel(batch)}_Envelopes_${timestamp}.pdf`;
       
       await sendEmailWithPDF(pdfBlob, safeFilename, 'envelope');
       if (!hiddenMode) alert('Email sent successfully!');
@@ -220,7 +220,7 @@ const EnvelopeReport = forwardRef<ReportRef, EnvelopeReportProps>(({ batchIdProp
               {settings?.churchLogo && <img src={settings.churchLogo} alt="Church Logo" className="h-16 object-contain mb-4" />}
               <h1 className="text-3xl font-bold text-gray-900 uppercase tracking-wider mb-2 print:text-2xl">Envelope Steward's Report</h1>
               <div className="text-sm font-medium text-gray-600 print:text-xs">
-                <p>Batch #: <span className="font-bold text-gray-900">{shortId(batch.id)}</span></p>
+                <p>Batch #: <span className="font-bold text-gray-900">{batchLabel(batch)}</span></p>
                 <p>Date: <span className="font-bold text-gray-900">{formatDate(batch.date)}</span></p>
                 <p>Source: <span className="font-bold text-gray-900">{batch.source}</span></p>
                 <p>Tellers: <span className="font-bold text-gray-900">
@@ -259,7 +259,8 @@ const EnvelopeReport = forwardRef<ReportRef, EnvelopeReportProps>(({ batchIdProp
                 <table className="w-full text-sm border-x border-b border-gray-100">
                   <thead className="text-xs text-gray-400 uppercase bg-white">
                     <tr>
-                      <th className="py-1 pl-4 text-left font-medium w-1/3">Fund</th>
+                      <th className="py-1 pl-4 text-left font-medium">Txn #</th>
+                      <th className="py-1 text-left font-medium w-1/4">Fund</th>
                       <th className="py-1 text-left font-medium w-1/4">Method</th>
                       <th className="py-1 text-left font-medium">Detail</th>
                       <th className="py-1 pr-4 text-right font-medium">Amount</th>
@@ -270,7 +271,8 @@ const EnvelopeReport = forwardRef<ReportRef, EnvelopeReportProps>(({ batchIdProp
                       <React.Fragment key={d.id}>
                         {d.splits.map((split, idx) => (
                           <tr key={`${d.id}-${idx}`}>
-                            <td className="py-1 pl-4 text-gray-700">
+                            <td className="py-1 pl-4 text-gray-400 text-xs font-mono">{idx === 0 ? d.transactionNumber : ''}</td>
+                            <td className="py-1 text-gray-700">
                               {split.fund === 'Internal' && split.internalAccount 
                                 ? `Internal (${split.internalAccount})` 
                                 : split.fund}

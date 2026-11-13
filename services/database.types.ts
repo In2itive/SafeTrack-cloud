@@ -40,11 +40,12 @@ export interface BatchRow {
   id: string; church_id: string; batch_number: string; batch_date: string; status: BatchStatusDb;
   source: BatchSourceDb; revision: number; created_by: string | null; created_at: string;
   finalized_at: string | null; content_changed_at: string; legacy_finalized_by: string[] | null;
+  legacy_batch_number: string | null; last_txn_seq: number;
 }
 export interface DonationRow {
   id: string; church_id: string; batch_id: string; giver_id: string; amount: number;
   payment_method: PaymentMethodDb; cheque_number: string | null; notes: string | null;
-  cash_counts: Json | null; sort_order: number; created_at: string;
+  cash_counts: Json | null; sort_order: number; created_at: string; transaction_number: string;
 }
 export interface SplitRow { id: string; church_id: string; donation_id: string; fund_id: string; internal_account_id: string | null; amount: number }
 export interface SignoffRow {

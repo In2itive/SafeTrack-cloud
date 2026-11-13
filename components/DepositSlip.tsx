@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, forwardRef, useImperativeHandle } from 'react';
 import { formatDate } from '../utils/date';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useLive, getSettings, getBatch, listDonations, getGivers, shortId } from '../services/repo';
+import { useLive, getSettings, getBatch, listDonations, getGivers, batchLabel } from '../services/repo';
 import { PaymentMethod, Giver } from '../types';
 import { Printer, ArrowLeft, Download, Mail } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
@@ -53,7 +53,7 @@ const DepositSlip = forwardRef<ReportRef, DepositSlipProps>(({ batchIdProp, hidd
     const element = reportRef.current;
     const opt = {
       margin: 10,
-      filename: `DepositSlip_Batch${shortId(batch.id)}_${new Date().toISOString().split('T')[0]}.pdf`,
+      filename: `DepositSlip_Batch${batchLabel(batch)}_${new Date().toISOString().split('T')[0]}.pdf`,
       image: { type: 'jpeg' as const, quality: 0.98 },
       html2canvas: { scale: 2, useCORS: true },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const }
@@ -69,7 +69,7 @@ const DepositSlip = forwardRef<ReportRef, DepositSlipProps>(({ batchIdProp, hidd
     setIsGenerating(true);
 
     const element = reportRef.current;
-    const filename = `DepositSlip_Batch${shortId(batch.id)}_${new Date().toISOString().split('T')[0]}.pdf`;
+    const filename = `DepositSlip_Batch${batchLabel(batch)}_${new Date().toISOString().split('T')[0]}.pdf`;
     const opt = {
       margin: 10,
       filename,
@@ -81,7 +81,7 @@ const DepositSlip = forwardRef<ReportRef, DepositSlipProps>(({ batchIdProp, hidd
     try {
       const pdfBlob = await html2pdf().set(opt).from(element).output('blob');
       const timestamp = new Date().getTime();
-      const safeFilename = `Batch_${shortId(batch.id)}_Deposit_${timestamp}.pdf`;
+      const safeFilename = `Batch_${batchLabel(batch)}_Deposit_${timestamp}.pdf`;
       
       await sendEmailWithPDF(pdfBlob, safeFilename, 'deposit');
       if (!hiddenMode) alert('Email sent successfully!');
@@ -198,7 +198,7 @@ const DepositSlip = forwardRef<ReportRef, DepositSlipProps>(({ batchIdProp, hidd
             </div>
             <div className="mt-4 text-sm">
               <p>Date: <span className="font-bold">{formatDate(batch.date)}</span></p>
-              <p>Batch #: <span className="font-bold">{shortId(batch.id)}</span></p>
+              <p>Batch #: <span className="font-bold">{batchLabel(batch)}</span></p>
             </div>
           </div>
         </div>
