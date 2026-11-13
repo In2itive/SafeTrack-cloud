@@ -11,6 +11,7 @@
  * Requires "Confirm email" to be OFF on the target project (dev/demo only).
  */
 import { createClient } from '@supabase/supabase-js';
+import fs from 'fs';
 
 const URL_ = process.env.VITE_SUPABASE_URL;
 const KEY = process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
@@ -69,8 +70,10 @@ for (const p of [people.treasurer, people.teller1, people.teller2]) {
   log('member added:', p.name, `(${p.role})`);
 }
 
-// Settings
+// Settings (logos are original demo artwork in scripts/demo-assets)
+const logo = (f) => 'data:image/png;base64,' + fs.readFileSync(new URL(`./demo-assets/${f}`, import.meta.url)).toString('base64');
 must(await admin.from('church_settings').update({
+  bank_logo: logo('test-bank.png'), church_logo: logo('grace-church.png'),
   account_of: 'Grace Community Church', branch_number: '00123', account_number: '1234567',
   church_address_line1: '123 Main Street', church_address_line2: 'Barrie, ON L4M 1A1', church_address_line3: '(705) 555-0100',
   accounting_recipients: [people.treasurer.email], envelope_recipients: [people.admin.email], deposit_recipients: [people.treasurer.email],
