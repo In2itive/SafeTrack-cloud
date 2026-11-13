@@ -401,7 +401,7 @@ const BatchHistory: React.FC = () => {
                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
                            <div className="bg-white rounded-lg border p-2"><div className="text-xs text-gray-400">Gifts</div><div className="text-lg font-bold">{providerSummary.count}</div></div>
                            <div className="bg-white rounded-lg border p-2"><div className="text-xs text-gray-400">Gross (receipted)</div><div className="text-lg font-bold">${providerSummary.gross.toFixed(2)}</div></div>
-                           <div className="bg-white rounded-lg border p-2"><div className="text-xs text-gray-400">Processing fees</div><div className="text-lg font-bold text-red-600">-${providerSummary.fees.toFixed(2)}</div></div>
+                           <div className="bg-white rounded-lg border p-2"><div className="text-xs text-gray-400">Processing fees</div><div className={`text-lg font-bold ${providerSummary.fees > 0 ? 'text-red-600' : 'text-gray-400'}`}>{providerSummary.fees > 0 ? `-$${providerSummary.fees.toFixed(2)}` : '$0.00'}</div></div>
                            <div className="bg-white rounded-lg border p-2"><div className="text-xs text-gray-400">Expected bank deposit</div><div className="text-lg font-bold text-green-700">${providerSummary.net.toFixed(2)}</div></div>
                          </div>
                          {Math.abs(providerSummary.gross - activeBatch.totalAmount) >= 0.01 && (

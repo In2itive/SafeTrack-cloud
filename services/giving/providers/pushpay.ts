@@ -213,9 +213,8 @@ export const pushpayProvider: FileProvider = {
   description: 'Online gifts made through Pushpay (app, web and text giving).',
   accept: '.csv,text/csv',
   exportSteps: [
-    'Sign in to Pushpay and open Transactions.',
-    'Set the Transaction period and choose Apply Filter.',
-    'Choose Export → "to CSV (Legacy)" and upload the file here.',
+    'Envelope report (Envelope #, Amount, Date, Fund): export it as CSV and upload it here. Gifts match givers by envelope number.',
+    'Or, in Pushpay Transactions: set the period, Apply Filter, then Export → "to CSV (Legacy)".',
   ],
   fields: FIELDS,
   detectMapping,
