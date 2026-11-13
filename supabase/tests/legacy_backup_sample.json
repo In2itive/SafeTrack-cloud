@@ -1,0 +1,30 @@
+{
+  "givers": [
+    {"id": 1, "envelopeNumber": 100, "name": "Jane Doe", "name2": "John Doe", "eTransferId": "jane@x.test"},
+    {"id": 2, "envelopeNumber": 101, "name": "Sam Lee"},
+    {"id": 3, "envelopeNumber": 101, "name": "Dup Envelope"}
+  ],
+  "batches": [
+    {"id": 1, "batchNumber": "B-1700000000000", "date": "2026-10-05", "status": "Finalized", "source": "In-Person",
+     "totalAmount": 170, "itemCount": 3, "newGiverIds": [2], "finalizedBy": ["Mary Teller", "Joe Teller"]},
+    {"id": 2, "batchNumber": "B-1700000000001", "date": "2026-10-12", "status": "Open", "source": "In-Person",
+     "totalAmount": 15, "itemCount": 1}
+  ],
+  "donations": [
+    {"id": 1, "giverId": 1, "batchId": 1, "amount": 100, "date": "2026-10-05", "paymentMethod": "Cheque", "chequeNumber": "551",
+     "splits": [{"fund": "General", "amount": 60}, {"fund": "Internal", "amount": 40, "internalAccount": "YOUTH"}]},
+    {"id": 2, "giverId": 0, "batchId": 1, "amount": 50.000000001, "date": "2026-10-05", "paymentMethod": "Cash",
+     "cashCounts": {"20": 2, "10": 1, "5": 0}, "splits": [{"fund": "General", "amount": 50}]},
+    {"id": 3, "giverId": 2, "batchId": 1, "amount": 20, "date": "2026-10-05", "paymentMethod": "Cheque",
+     "splits": [{"fund": "Roof Appeal", "amount": 20}]},
+    {"id": 4, "giverId": 99, "batchId": 2, "amount": 15, "paymentMethod": "Cash", "cashCounts": {"5": 3}}
+  ],
+  "settings": [{"id": 1, "nextEnvelopeNumber": 150, "smtpHost": "smtp.church.test", "smtpPort": 465, "smtpUser": "u",
+                "smtpPassword": "p", "smtpFrom": "count@church.test", "accountingRecipients": "a@x.test, b@x.test",
+                "accountOf": "Grace Church", "branchNumber": "00123", "accountNumber": "9876543"}],
+  "funds": [{"id": 1, "name": "General", "isSystem": true, "isActive": true},
+            {"id": 8, "name": "Roof Appeal", "isSystem": false, "isActive": true},
+            {"id": 3, "name": "Missions", "isSystem": true, "isActive": false}],
+  "internalAccounts": [{"id": 1, "name": "YOUTH", "isActive": true}],
+  "users": [{"id": 1, "username": "admin", "passwordHash": "x"}, {"id": 2, "username": "mary", "passwordHash": "y"}]
+}

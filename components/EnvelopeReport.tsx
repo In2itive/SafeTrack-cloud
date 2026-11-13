@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, forwardRef, useImperativeHandle } from 'react';
+import { formatDate } from '../utils/date';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../services/db';
+import { useLive, getSettings, getBatch, listDonations, getGivers, shortId } from '../services/repo';
 import { PaymentMethod, Giver, Donation } from '../types';
 import { ArrowLeft, Printer, Users, Download, Mail } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
@@ -13,7 +13,7 @@ export interface ReportRef {
 }
 
 interface EnvelopeReportProps {
-  batchIdProp?: number;
+  batchIdProp?: string;
   hiddenMode?: boolean;
 }
 
@@ -22,32 +22,26 @@ const EnvelopeReport = forwardRef<ReportRef, EnvelopeReportProps>(({ batchIdProp
   const batchId = batchIdProp ? batchIdProp.toString() : routeBatchId;
   const navigate = useNavigate();
   const { user, secondaryUser } = useAuth();
-  const [givers, setGivers] = useState<Map<number, Giver>>(new Map());
+  const [givers, setGivers] = useState<Map<string, Giver>>(new Map());
   const reportRef = useRef<HTMLDivElement>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [newGivers, setNewGivers] = useState<Giver[]>([]);
 
-  const settings = useLiveQuery(() => db.settings.orderBy('id').first());
+  const settings = useLive(getSettings);
 
-  const batch = useLiveQuery(() => 
-    batchId ? db.batches.get(parseInt(batchId)) : Promise.resolve(undefined)
-  , [batchId]);
+  const batch = useLive(() => batchId ? getBatch(batchId) : Promise.resolve(undefined), [batchId]);
 
-  const donations = useLiveQuery(() => 
-    batchId ? db.donations.where('batchId').equals(parseInt(batchId)).toArray() : Promise.resolve([])
-  , [batchId]);
+  const donations = useLive(() => batchId ? listDonations(batchId) : Promise.resolve([]), [batchId]);
 
   // Fetch Givers and New Givers
   useEffect(() => {
     if (donations && donations.length > 0) {
       const giverIds = [...new Set(donations.map(d => d.giverId))];
-      db.givers.bulkGet(giverIds).then(giverList => {
-        const map = new Map<number, Giver>();
+      getGivers(giverIds).then(giverList => {
+        const map = new Map<string, Giver>();
         giverList.forEach(g => {
           if (g) map.set(g.id!, g);
         });
-        map.set(0, { id: 0, name: 'Loose Giving', envelopeNumber: 0 });
-        map.set(-1, { id: -1, name: 'Internal', envelopeNumber: 1 });
         setGivers(map);
       });
     }
@@ -55,7 +49,7 @@ const EnvelopeReport = forwardRef<ReportRef, EnvelopeReportProps>(({ batchIdProp
 
   useEffect(() => {
     if (batch && batch.newGiverIds && batch.newGiverIds.length > 0) {
-      db.givers.bulkGet(batch.newGiverIds).then(giverList => {
+      getGivers(batch.newGiverIds).then(giverList => {
         setNewGivers(giverList.filter((g): g is Giver => !!g));
       });
     } else {
@@ -70,7 +64,7 @@ const EnvelopeReport = forwardRef<ReportRef, EnvelopeReportProps>(({ batchIdProp
     const element = reportRef.current;
     const opt = {
       margin: 10,
-      filename: `EnvelopeReport_Batch${batch.id}_${new Date().toISOString().split('T')[0]}.pdf`,
+      filename: `EnvelopeReport_Batch${shortId(batch.id)}_${new Date().toISOString().split('T')[0]}.pdf`,
       image: { type: 'jpeg' as const, quality: 0.98 },
       html2canvas: { scale: 2, useCORS: true },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const }
@@ -86,7 +80,7 @@ const EnvelopeReport = forwardRef<ReportRef, EnvelopeReportProps>(({ batchIdProp
     setIsGenerating(true);
 
     const element = reportRef.current;
-    const filename = `EnvelopeReport_Batch${batch.id}_${new Date().toISOString().split('T')[0]}.pdf`;
+    const filename = `EnvelopeReport_Batch${shortId(batch.id)}_${new Date().toISOString().split('T')[0]}.pdf`;
     const opt = {
       margin: 10,
       filename,
@@ -97,7 +91,8 @@ const EnvelopeReport = forwardRef<ReportRef, EnvelopeReportProps>(({ batchIdProp
 
     try {
       const pdfBlob = await html2pdf().set(opt).from(element).output('blob');
-      const safeFilename = `Batch_${batch.id}_Envelopes.pdf`;
+      const timestamp = new Date().getTime();
+      const safeFilename = `Batch_${shortId(batch.id)}_Envelopes_${timestamp}.pdf`;
       
       await sendEmailWithPDF(pdfBlob, safeFilename, 'envelope');
       if (!hiddenMode) alert('Email sent successfully!');
@@ -119,12 +114,17 @@ const EnvelopeReport = forwardRef<ReportRef, EnvelopeReportProps>(({ batchIdProp
   // --- Processing ---
 
   // 1. Group by Envelope (Regular Givers Only)
-  const envelopeGroups = new Map<number, { giver: Giver, donations: Donation[] }>();
+  const envelopeGroups = new Map<string, { giver: Giver, donations: Donation[] }>();
   const specialDonations: Donation[] = [];
+  // #0 Loose Giving and #1 Internal are reported separately from envelopes
+  // Givers registered during this batch get a NEW badge and their address for the steward
+  const isNewGiver = (g: Giver) => !!g.id && !!batch.newGiverIds?.includes(g.id);
+  const fullAddress = (g: Giver) => [g.address1, g.address2, g.address3].filter(Boolean).join(', ');
+  const isSpecial = (id: string) => { const e = givers.get(id)?.envelopeNumber; return e === 0 || e === 1; };
 
   donations.forEach(d => {
     // Check if Loose (0) or Internal (-1)
-    if (d.giverId === 0 || d.giverId === -1) {
+    if (isSpecial(d.giverId)) {
       specialDonations.push(d);
     } else {
       const giver = givers.get(d.giverId) || { id: d.giverId, name: 'Unknown', envelopeNumber: 99999 };
@@ -158,9 +158,9 @@ const EnvelopeReport = forwardRef<ReportRef, EnvelopeReportProps>(({ batchIdProp
   specialDonations.forEach(d => {
     d.splits.forEach(s => {
       let fundName = s.fund;
-      if (d.giverId === 0) {
+      if (givers.get(d.giverId)?.envelopeNumber === 0) {
         fundName = `Loose: ${s.fund}`;
-      } else if (d.giverId === -1) {
+      } else if (givers.get(d.giverId)?.envelopeNumber === 1) {
          fundName = `Internal: ${s.internalAccount || s.fund}`;
       }
       specialFundSummary[fundName] = (specialFundSummary[fundName] || 0) + s.amount;
@@ -211,7 +211,7 @@ const EnvelopeReport = forwardRef<ReportRef, EnvelopeReportProps>(({ batchIdProp
       )}
 
       {/* Report Paper */}
-      <div ref={reportRef} className="max-w-4xl mx-auto bg-white p-12 rounded-3xl shadow-xl print:shadow-none print:p-8 print:max-w-none">
+      <div ref={reportRef} className="max-w-4xl mx-auto bg-white p-6 rounded-3xl shadow-xl print:shadow-none print:p-0 print:max-w-none">
         
         {/* Header */}
         <div className="border-b-2 border-gray-800 pb-6 mb-8 print:pb-4 print:mb-6">
@@ -220,11 +220,11 @@ const EnvelopeReport = forwardRef<ReportRef, EnvelopeReportProps>(({ batchIdProp
               {settings?.churchLogo && <img src={settings.churchLogo} alt="Church Logo" className="h-16 object-contain mb-4" />}
               <h1 className="text-3xl font-bold text-gray-900 uppercase tracking-wider mb-2 print:text-2xl">Envelope Steward's Report</h1>
               <div className="text-sm font-medium text-gray-600 print:text-xs">
-                <p>Batch #: <span className="font-bold text-gray-900">{batch.id}</span></p>
-                <p>Date: <span className="font-bold text-gray-900">{new Date(batch.date).toLocaleDateString()}</span></p>
+                <p>Batch #: <span className="font-bold text-gray-900">{shortId(batch.id)}</span></p>
+                <p>Date: <span className="font-bold text-gray-900">{formatDate(batch.date)}</span></p>
                 <p>Source: <span className="font-bold text-gray-900">{batch.source}</span></p>
                 <p>Tellers: <span className="font-bold text-gray-900">
-                  {batch.finalizedBy?.join(', ') || 'Not Finalized'}
+                  {batch.finalizedBy?.join(', ') || 'Not Finalized'}{batch.adjustedBy?.length ? ` · Adj: ${batch.adjustedBy.join(', ')}` : ''}
                 </span></p>
               </div>
             </div>
@@ -242,11 +242,17 @@ const EnvelopeReport = forwardRef<ReportRef, EnvelopeReportProps>(({ batchIdProp
             
             return (
               <div key={group.giver.id} className="break-inside-avoid">
-                <div className="flex justify-between items-center bg-gray-50 p-2 rounded-t-lg border-b border-gray-200 print:bg-gray-100 print:py-1">
-                  <h3 className="font-bold text-gray-800">
-                    <span className="inline-block w-16 bg-white border border-gray-300 rounded px-2 py-0.5 text-center text-sm mr-3">#{group.giver.envelopeNumber}</span>
-                    {group.giver.name} {group.giver.name2 ? `& ${group.giver.name2}` : ''}
-                  </h3>
+                <div className="flex justify-between items-start bg-gray-50 p-2 rounded-t-lg border-b border-gray-200 print:bg-gray-100 print:py-1">
+                  <div>
+                    <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                      <span className="inline-block w-16 bg-white border border-gray-300 rounded px-2 py-0.5 text-center text-sm">#{group.giver.envelopeNumber}</span>
+                      {group.giver.name} {group.giver.name2 ? `& ${group.giver.name2}` : ''}
+                      {isNewGiver(group.giver) && <span className="text-[10px] bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded uppercase font-bold">New</span>}
+                    </h3>
+                    {isNewGiver(group.giver) && fullAddress(group.giver) && (
+                      <p className="text-xs text-gray-600 mt-1 ml-[5.5rem]">{fullAddress(group.giver)}</p>
+                    )}
+                  </div>
                   <span className="font-bold text-gray-900">${groupTotal.toFixed(2)}</span>
                 </div>
                 
@@ -387,7 +393,7 @@ const EnvelopeReport = forwardRef<ReportRef, EnvelopeReportProps>(({ batchIdProp
         <div className="mt-8 pt-4 border-t border-gray-200 text-center text-xs text-gray-400 print:mt-4">
           {batch.finalizedBy && batch.finalizedBy.length > 0 && (
             <p className="mb-2 text-gray-600 font-medium">
-              Finalized by: {batch.finalizedBy.join(', ')}
+              Finalized by: {batch.finalizedBy.join(', ')}{batch.adjustedBy?.length ? ` (adjusted by ${batch.adjustedBy.join(', ')})` : ''}
             </p>
           )}
           <p>SafeTrack Vault System • {new Date().toLocaleString()}</p>

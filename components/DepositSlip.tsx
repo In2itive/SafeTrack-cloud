@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, forwardRef, useImperativeHandle } from 'react';
+import { formatDate } from '../utils/date';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../services/db';
+import { useLive, getSettings, getBatch, listDonations, getGivers, shortId } from '../services/repo';
 import { PaymentMethod, Giver } from '../types';
 import { Printer, ArrowLeft, Download, Mail } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
@@ -13,7 +13,7 @@ export interface ReportRef {
 }
 
 interface DepositSlipProps {
-  batchIdProp?: number;
+  batchIdProp?: string;
   hiddenMode?: boolean;
 }
 
@@ -22,32 +22,25 @@ const DepositSlip = forwardRef<ReportRef, DepositSlipProps>(({ batchIdProp, hidd
   const batchId = batchIdProp ? batchIdProp.toString() : routeBatchId;
   const navigate = useNavigate();
   const { user, secondaryUser } = useAuth();
-  const [givers, setGivers] = useState<Map<number, Giver>>(new Map());
+  const [givers, setGivers] = useState<Map<string, Giver>>(new Map());
   const reportRef = useRef<HTMLDivElement>(null);
   const [isGenerating, setIsGenerating] = useState(false);
 
-  const settings = useLiveQuery(() => db.settings.orderBy('id').first());
+  const settings = useLive(getSettings);
 
-  const batch = useLiveQuery(() => 
-    batchId ? db.batches.get(parseInt(batchId)) : Promise.resolve(undefined)
-  , [batchId]);
+  const batch = useLive(() => batchId ? getBatch(batchId) : Promise.resolve(undefined), [batchId]);
 
-  const donations = useLiveQuery(() => 
-    batchId ? db.donations.where('batchId').equals(parseInt(batchId)).toArray() : Promise.resolve([])
-  , [batchId]);
+  const donations = useLive(() => batchId ? listDonations(batchId) : Promise.resolve([]), [batchId]);
 
   // Fetch Givers for names
   useEffect(() => {
     if (donations && donations.length > 0) {
       const giverIds = [...new Set(donations.map(d => d.giverId))];
-      db.givers.bulkGet(giverIds).then(giverList => {
-        const map = new Map<number, Giver>();
+      getGivers(giverIds).then(giverList => {
+        const map = new Map<string, Giver>();
         giverList.forEach(g => {
           if (g) map.set(g.id!, g);
         });
-        // Add special givers
-        map.set(0, { id: 0, name: 'Loose Giving', envelopeNumber: 0 });
-        map.set(-1, { id: -1, name: 'Internal', envelopeNumber: 1 });
         setGivers(map);
       });
     }
@@ -60,7 +53,7 @@ const DepositSlip = forwardRef<ReportRef, DepositSlipProps>(({ batchIdProp, hidd
     const element = reportRef.current;
     const opt = {
       margin: 10,
-      filename: `DepositSlip_Batch${batch.id}_${new Date().toISOString().split('T')[0]}.pdf`,
+      filename: `DepositSlip_Batch${shortId(batch.id)}_${new Date().toISOString().split('T')[0]}.pdf`,
       image: { type: 'jpeg' as const, quality: 0.98 },
       html2canvas: { scale: 2, useCORS: true },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const }
@@ -76,7 +69,7 @@ const DepositSlip = forwardRef<ReportRef, DepositSlipProps>(({ batchIdProp, hidd
     setIsGenerating(true);
 
     const element = reportRef.current;
-    const filename = `DepositSlip_Batch${batch.id}_${new Date().toISOString().split('T')[0]}.pdf`;
+    const filename = `DepositSlip_Batch${shortId(batch.id)}_${new Date().toISOString().split('T')[0]}.pdf`;
     const opt = {
       margin: 10,
       filename,
@@ -87,7 +80,8 @@ const DepositSlip = forwardRef<ReportRef, DepositSlipProps>(({ batchIdProp, hidd
 
     try {
       const pdfBlob = await html2pdf().set(opt).from(element).output('blob');
-      const safeFilename = `Batch_${batch.id}_Deposit.pdf`;
+      const timestamp = new Date().getTime();
+      const safeFilename = `Batch_${shortId(batch.id)}_Deposit_${timestamp}.pdf`;
       
       await sendEmailWithPDF(pdfBlob, safeFilename, 'deposit');
       if (!hiddenMode) alert('Email sent successfully!');
@@ -180,7 +174,7 @@ const DepositSlip = forwardRef<ReportRef, DepositSlipProps>(({ batchIdProp, hidd
       )}
 
       {/* Report Paper */}
-      <div ref={reportRef} className="max-w-4xl mx-auto bg-white p-12 rounded-3xl shadow-xl print:shadow-none print:p-8 print:max-w-none">
+      <div ref={reportRef} className="max-w-4xl mx-auto bg-white p-6 rounded-3xl shadow-xl print:shadow-none print:p-0 print:max-w-none">
         
         {/* Header Section - Reorganized for Print Compactness */}
         <div className="flex justify-between items-start border-b-2 border-gray-800 pb-6 mb-8 print:pb-4 print:mb-6">
@@ -203,7 +197,7 @@ const DepositSlip = forwardRef<ReportRef, DepositSlipProps>(({ batchIdProp, hidd
               <p>{settings?.churchAddressLine3 || '________________________'}</p>
             </div>
             <div className="mt-4 text-sm">
-              <p>Date: <span className="font-bold">{new Date(batch.date).toLocaleDateString()}</span></p>
+              <p>Date: <span className="font-bold">{formatDate(batch.date)}</span></p>
               <p>Batch #: <span className="font-bold">{batch.id}</span></p>
             </div>
           </div>
@@ -306,25 +300,29 @@ const DepositSlip = forwardRef<ReportRef, DepositSlipProps>(({ batchIdProp, hidd
           </div>
         </div>
 
-        {/* Signature Line */}
-        <div className="mt-16 pt-8 border-t border-gray-300 grid grid-cols-3 gap-12 text-xs text-gray-400 uppercase tracking-widest break-inside-avoid print:mt-8 print:pt-4">
-          <div className="space-y-12 print:space-y-8">
-            <div>
-              <div className="border-b border-gray-400 mb-2 h-6 flex items-end">
-                <span className="text-gray-800 font-bold text-sm normal-case">{batch.finalizedBy?.[0] || ''}</span>
+        {/* Signature Line: the original two tellers always stay on the slip; an admin adjustment adds a line */}
+        <div className={`mt-16 pt-8 border-t border-gray-300 grid ${batch.adjustedBy?.length ? 'grid-cols-4' : 'grid-cols-3'} gap-12 text-xs text-gray-400 uppercase tracking-widest break-inside-avoid print:mt-8 print:pt-4`}>
+          {[0, 1].map(i => (
+            <div key={i} className="space-y-12 print:space-y-8">
+              <div>
+                <div className="border-b border-gray-400 mb-2 h-6 flex items-end">
+                  <span className="text-gray-800 font-bold text-sm normal-case">{batch.finalizedBy?.[i] || ''}</span>
+                </div>
+                Teller {i + 1} Secure Sign in
               </div>
-              Teller 1 Secure Sign in
             </div>
-          </div>
-          
-          <div className="space-y-12 print:space-y-8">
-            <div>
-              <div className="border-b border-gray-400 mb-2 h-6 flex items-end">
-                <span className="text-gray-800 font-bold text-sm normal-case">{batch.finalizedBy?.[1] || ''}</span>
+          ))}
+
+          {batch.adjustedBy?.length ? (
+            <div className="space-y-12 print:space-y-8">
+              <div>
+                <div className="border-b border-gray-400 mb-2 h-6 flex items-end">
+                  <span className="text-gray-800 font-bold text-sm normal-case">{batch.adjustedBy.join(', ')}</span>
+                </div>
+                Admin / Adj
               </div>
-              Teller 2 Secure Sign in
             </div>
-          </div>
+          ) : null}
 
           <div className="flex flex-col justify-end pb-1">
             <div className="border-b border-gray-400 mb-2 h-6 flex items-end justify-end">

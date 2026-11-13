@@ -1,19 +1,17 @@
 import React, { useState } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../services/db';
 import { User, UserRole } from '../types';
-import { hashPassword } from '../utils/auth';
+import { useLive, listMembers, addMember, updateMember, removeMember } from '../services/repo';
 import { useAuth } from '../contexts/AuthContext';
 import { Users, Plus, Edit, Trash2, Shield, Mail, Lock, User as UserIcon, X, Check } from 'lucide-react';
 
 const UserManagement = () => {
   const { user: currentUser } = useAuth();
-  const users = useLiveQuery(() => db.users.toArray());
+  const [loadError, setLoadError] = useState('');
+  const users = useLive(() => listMembers().catch(e => { setLoadError(e.message); return [] as User[]; }));
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [userToDelete, setUserToDelete] = useState<number | null>(null);
+  const [userToDelete, setUserToDelete] = useState<string | null>(null);
   const [formData, setFormData] = useState({
-    username: '',
     name: '',
     email: '',
     role: UserRole.Teller,
@@ -35,7 +33,6 @@ const UserManagement = () => {
     if (user) {
       setEditingUser(user);
       setFormData({
-        username: user.username,
         name: user.name,
         email: user.email,
         role: user.role,
@@ -44,7 +41,6 @@ const UserManagement = () => {
     } else {
       setEditingUser(null);
       setFormData({
-        username: '',
         name: '',
         email: '',
         role: UserRole.Teller,
@@ -55,13 +51,17 @@ const UserManagement = () => {
     setIsModalOpen(true);
   };
 
-  const handleDelete = (id: number) => {
+  const handleDelete = (id: string) => {
     setUserToDelete(id);
   };
 
   const confirmDelete = async () => {
     if (userToDelete) {
-      await db.users.delete(userToDelete);
+      try {
+        await removeMember(userToDelete);
+      } catch (err: any) {
+        alert(err.message || 'Could not remove user');
+      }
       setUserToDelete(null);
     }
   };
@@ -71,34 +71,22 @@ const UserManagement = () => {
     setError('');
 
     try {
-      const payload: any = {
-        username: formData.username,
-        name: formData.name,
-        email: formData.email,
-        role: formData.role
-      };
-
-      if (formData.password) {
-        payload.passwordHash = await hashPassword(formData.password);
-      } else if (!editingUser) {
-        setError("Password is required for new users");
-        return;
-      }
-
       if (editingUser && editingUser.id) {
-        await db.users.update(editingUser.id, payload);
-      } else {
-        // Check if username exists
-        const existing = await db.users.where('username').equals(formData.username).first();
-        if (existing) {
-          setError("Username already taken");
+        if (formData.password && formData.password.length < 8) {
+          setError("Passwords must be at least 8 characters");
           return;
         }
-        await db.users.add(payload as User);
+        await updateMember(editingUser.id, { name: formData.name, role: formData.role, password: formData.password });
+      } else {
+        if (!formData.password || formData.password.length < 8) {
+          setError("A temporary password of at least 8 characters is required for new users");
+          return;
+        }
+        await addMember({ email: formData.email, name: formData.name, role: formData.role, password: formData.password });
       }
       setIsModalOpen(false);
-    } catch (err) {
-      setError("Failed to save user");
+    } catch (err: any) {
+      setError(err.message || "Failed to save user");
     }
   };
 
@@ -120,6 +108,9 @@ const UserManagement = () => {
         </button>
       </div>
 
+      {loadError && (
+        <div className="bg-red-50 text-red-600 p-3 rounded-xl text-sm mb-6 border border-red-100">{loadError}</div>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {users?.map(user => (
           <div key={user.id} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow relative group">
@@ -151,7 +142,7 @@ const UserManagement = () => {
             </div>
             
             <h3 className="text-lg font-bold text-gray-800">{user.name}</h3>
-            <p className="text-sm text-gray-500 mb-4">@{user.username}</p>
+            <p className="text-sm text-gray-500 mb-4">{user.isActive === false ? 'Inactive' : 'Active'}</p>
             
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -172,7 +163,7 @@ const UserManagement = () => {
       {/* Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl animate-fade-in-up">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl animate-fade-in-up">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-xl font-bold text-gray-800">
                 {editingUser ? 'Edit User' : 'Create New User'}
@@ -204,26 +195,14 @@ const UserManagement = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Username</label>
-                <div className="relative">
-                  <UserIcon className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
-                  <input
-                    type="text"
-                    required
-                    className="w-full pl-9 p-2.5 rounded-xl border border-gray-400 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-church-500 outline-none text-sm"
-                    value={formData.username}
-                    onChange={e => setFormData({...formData, username: e.target.value})}
-                  />
-                </div>
-              </div>
-
-              <div>
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Email</label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
                   <input
                     type="email"
                     required
+                    disabled={!!editingUser}
+                    autoComplete="off"
                     className="w-full pl-9 p-2.5 rounded-xl border border-gray-400 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-church-500 outline-none text-sm"
                     value={formData.email}
                     onChange={e => setFormData({...formData, email: e.target.value})}

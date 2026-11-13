@@ -1,7 +1,7 @@
 import React, { useRef, useState, forwardRef, useImperativeHandle } from 'react';
+import { formatDate } from '../utils/date';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../services/db';
+import { useLive, getSettings, getBatch, listDonations, getGivers, shortId } from '../services/repo';
 import { ArrowLeft, Printer, FileSpreadsheet, Download, Mail } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
 import { useAuth } from '../contexts/AuthContext';
@@ -12,7 +12,7 @@ export interface ReportRef {
 }
 
 interface AccountingReportProps {
-  batchIdProp?: number;
+  batchIdProp?: string;
   hiddenMode?: boolean;
 }
 
@@ -24,15 +24,11 @@ const AccountingReport = forwardRef<ReportRef, AccountingReportProps>(({ batchId
   const reportRef = useRef<HTMLDivElement>(null);
   const [isGenerating, setIsGenerating] = useState(false);
 
-  const settings = useLiveQuery(() => db.settings.orderBy('id').first());
+  const settings = useLive(getSettings);
 
-  const batch = useLiveQuery(() => 
-    batchId ? db.batches.get(parseInt(batchId)) : Promise.resolve(undefined)
-  , [batchId]);
+  const batch = useLive(() => batchId ? getBatch(batchId) : Promise.resolve(undefined), [batchId]);
 
-  const donations = useLiveQuery(() => 
-    batchId ? db.donations.where('batchId').equals(parseInt(batchId)).toArray() : Promise.resolve([])
-  , [batchId]);
+  const donations = useLive(() => batchId ? listDonations(batchId) : Promise.resolve([]), [batchId]);
 
   const handleDownloadPDF = () => {
     if (!reportRef.current || !batch) return;
@@ -41,7 +37,7 @@ const AccountingReport = forwardRef<ReportRef, AccountingReportProps>(({ batchId
     const element = reportRef.current;
     const opt = {
       margin: 10,
-      filename: `AccountingReport_Batch${batch.id}_${new Date().toISOString().split('T')[0]}.pdf`,
+      filename: `AccountingReport_Batch${shortId(batch.id)}_${new Date().toISOString().split('T')[0]}.pdf`,
       image: { type: 'jpeg' as const, quality: 0.98 },
       html2canvas: { scale: 2, useCORS: true },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const }
@@ -57,7 +53,7 @@ const AccountingReport = forwardRef<ReportRef, AccountingReportProps>(({ batchId
     setIsGenerating(true);
 
     const element = reportRef.current;
-    const filename = `AccountingReport_Batch${batch.id}_${new Date().toISOString().split('T')[0]}.pdf`;
+    const filename = `AccountingReport_Batch${shortId(batch.id)}_${new Date().toISOString().split('T')[0]}.pdf`;
     const opt = {
       margin: 10,
       filename,
@@ -68,7 +64,8 @@ const AccountingReport = forwardRef<ReportRef, AccountingReportProps>(({ batchId
 
     try {
       const pdfBlob = await html2pdf().set(opt).from(element).output('blob');
-      const safeFilename = `Batch_${batch.id}_Accounting.pdf`;
+      const timestamp = new Date().getTime();
+      const safeFilename = `Batch_${shortId(batch.id)}_Accounting_${timestamp}.pdf`;
       
       await sendEmailWithPDF(pdfBlob, safeFilename, 'accounting');
       if (!hiddenMode) alert('Email sent successfully!');
@@ -146,7 +143,7 @@ const AccountingReport = forwardRef<ReportRef, AccountingReportProps>(({ batchId
       )}
 
       {/* Report Paper */}
-      <div ref={reportRef} className="max-w-4xl mx-auto bg-white p-12 rounded-3xl shadow-xl print:shadow-none print:p-8 print:max-w-none">
+      <div ref={reportRef} className="max-w-4xl mx-auto bg-white p-6 rounded-3xl shadow-xl print:shadow-none print:p-0 print:max-w-none">
         
         {/* Header */}
         <div className="border-b-2 border-gray-800 pb-6 mb-8 print:pb-4 print:mb-6">
@@ -155,11 +152,11 @@ const AccountingReport = forwardRef<ReportRef, AccountingReportProps>(({ batchId
               {settings?.churchLogo && <img src={settings.churchLogo} alt="Church Logo" className="h-16 object-contain mb-4" />}
               <h1 className="text-3xl font-bold text-gray-900 uppercase tracking-wider mb-2 print:text-2xl">Accounting Summary</h1>
               <div className="text-sm font-medium text-gray-600 print:text-xs">
-                <p>Batch #: <span className="font-bold text-gray-900">{batch.id}</span></p>
-                <p>Date: <span className="font-bold text-gray-900">{new Date(batch.date).toLocaleDateString()}</span></p>
+                <p>Batch #: <span className="font-bold text-gray-900">{shortId(batch.id)}</span></p>
+                <p>Date: <span className="font-bold text-gray-900">{formatDate(batch.date)}</span></p>
                 <p>Source: <span className="font-bold text-gray-900">{batch.source}</span></p>
                 <p>Tellers: <span className="font-bold text-gray-900">
-                  {batch.finalizedBy?.join(', ') || 'Not Finalized'}
+                  {batch.finalizedBy?.join(', ') || 'Not Finalized'}{batch.adjustedBy?.length ? ` · Adj: ${batch.adjustedBy.join(', ')}` : ''}
                 </span></p>
               </div>
             </div>
@@ -241,7 +238,7 @@ const AccountingReport = forwardRef<ReportRef, AccountingReportProps>(({ batchId
         <div className="mt-12 pt-8 border-t border-gray-200 text-center text-xs text-gray-400 print:mt-8">
           {batch.finalizedBy && batch.finalizedBy.length > 0 && (
             <p className="mb-2 text-gray-600 font-medium">
-              Finalized by: {batch.finalizedBy.join(', ')}
+              Finalized by: {batch.finalizedBy.join(', ')}{batch.adjustedBy?.length ? ` (adjusted by ${batch.adjustedBy.join(', ')})` : ''}
             </p>
           )}
           <p>Generated by SafeTrack Vault System on {new Date().toLocaleString()}</p>

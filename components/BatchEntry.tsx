@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db, getNextEnvelopeNumber, incrementEnvelopeNumber } from '../services/db';
+import {
+  useLive, listGivers, getGivers, getSystemGivers, SystemGivers, listInternalAccounts, listFunds,
+  getBatch, listDonations, saveBatch, deleteDonation, addGiver, getNextEnvelopeNumber, shortId,
+} from '../services/repo';
 import { PaymentMethod, BatchStatus, DonationSplit, Giver, Batch, BatchSource, FundEntity } from '../types';
 import { Plus, Save, Trash2, AlertCircle, Layers, Calculator, X, Check, Banknote, Search, UserPlus, AlertTriangle, ChevronDown, ArrowLeft, Users, CreditCard, Smartphone } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -9,9 +11,9 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 
 interface Row {
   id: number; // React Key (timestamp or DB ID)
-  donationId?: number; // DB ID if editing existing donation
+  donationId?: string; // DB ID if editing existing donation
   // Giver Data
-  giverId?: number; 
+  giverId?: string; 
   inputValue: string; // The text in the giver input
   // Financial Data
   amount: string;
@@ -34,12 +36,13 @@ const GiverInput: React.FC<{
   value: string;
   isLocked: boolean;
   onChange: (val: string) => void;
-  onSelect: (giver: Giver | { id: number, name: string, name2?: string, envelopeNumber: number }) => void;
+  onSelect: (giver: Giver) => void;
   onCreate: (name: string) => void;
   onClear: () => void;
   givers: Giver[];
+  systemGivers?: SystemGivers;
   autoFocus?: boolean;
-}> = ({ rowId, value, isLocked, onChange, onSelect, onCreate, onClear, givers, autoFocus }) => {
+}> = ({ rowId, value, isLocked, onChange, onSelect, onCreate, onClear, givers, systemGivers, autoFocus }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -52,11 +55,11 @@ const GiverInput: React.FC<{
     const results: any[] = [];
 
     // Special System Givers
-    if ('loose giving'.includes(term) || term === '0') {
-        results.push({ id: 0, name: 'Loose Giving', envelopeNumber: 0 });
+    if (systemGivers && ('loose giving'.includes(term) || term === '0')) {
+        results.push(systemGivers.loose);
     }
-    if ('internal'.includes(term) || term === '1') {
-        results.push({ id: -1, name: 'Internal', envelopeNumber: 1 });
+    if (systemGivers && ('internal'.includes(term) || term === '1')) {
+        results.push(systemGivers.internal);
     }
 
     // Exact envelope match first
@@ -112,13 +115,13 @@ const GiverInput: React.FC<{
         <input
           type="text"
           readOnly
-          className="w-full pl-9 pr-10 py-2 rounded-lg border border-green-400 bg-green-50 text-green-900 outline-none text-sm font-bold cursor-default"
+          className="w-full pl-9 pr-10 py-1.5 rounded-lg border border-green-400 bg-green-50 text-green-900 outline-none text-base font-bold cursor-default"
           value={value}
         />
         <button
           type="button"
           onClick={onClear}
-          className="absolute right-2 top-1.5 p-1 text-gray-400 hover:text-red-500 rounded-full hover:bg-red-50 transition-colors"
+          className="absolute right-2 top-1 p-1 text-gray-400 hover:text-red-500 rounded-full hover:bg-red-50 transition-colors"
           title="Clear Selection"
         >
           <X className="w-4 h-4" />
@@ -130,11 +133,11 @@ const GiverInput: React.FC<{
   return (
     <div className="relative w-full">
       <div className="relative">
-        <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+        <Search className="absolute left-3 top-2 w-4 h-4 text-gray-400" />
         <input
           ref={inputRef}
           type="text"
-          className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-400 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-church-500 outline-none text-sm font-medium"
+          className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-gray-400 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-church-500 outline-none text-base font-medium"
           placeholder="Env #, Name, or ID"
           value={value}
           onChange={(e) => {
@@ -190,7 +193,7 @@ const GiverInput: React.FC<{
 const InternalAccountInput: React.FC<{
   value: string;
   onChange: (val: string) => void;
-  accounts: { id?: number, name: string }[];
+  accounts: { id?: string, name: string }[];
 }> = ({ value, onChange, accounts }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -225,7 +228,7 @@ const InternalAccountInput: React.FC<{
       <input
         ref={inputRef}
         type="text"
-        className="w-full p-2 rounded-xl border border-gray-400 bg-white text-sm font-bold text-gray-800 focus:ring-2 focus:ring-church-500 outline-none uppercase transition-all placeholder:font-normal placeholder:text-gray-400 placeholder:normal-case"
+        className="w-full p-1.5 rounded-lg border border-gray-400 bg-white text-base font-bold text-gray-800 focus:ring-2 focus:ring-church-500 outline-none uppercase transition-all placeholder:font-normal placeholder:text-gray-400 placeholder:normal-case"
         placeholder="Enter account code"
         value={value}
         onChange={(e) => {
@@ -261,12 +264,13 @@ const BatchEntry: React.FC = () => {
   const [searchParams] = useSearchParams();
   const editBatchId = searchParams.get('batchId');
 
-  const allGivers = useLiveQuery(() => db.givers.toArray()) || [];
-  const internalAccounts = useLiveQuery(() => db.internalAccounts.toArray()) || [];
+  const allGivers = useLive(listGivers) || [];
+  const internalAccounts = (useLive(listInternalAccounts) || []).filter(a => a.isActive);
+  const systemGivers = useLive(getSystemGivers);
   
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [editingBatch, setEditingBatch] = useState<Batch | null>(null);
-  const [newGiverIds, setNewGiverIds] = useState<number[]>([]);
+  const [newGiverIds, setNewGiverIds] = useState<string[]>([]);
   
   const [rows, setRows] = useState<Row[]>([
     { 
@@ -280,7 +284,7 @@ const BatchEntry: React.FC = () => {
     }
   ]);
   
-  const [deletedRowIds, setDeletedRowIds] = useState<number[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
 
   // Modals
@@ -300,46 +304,49 @@ const BatchEntry: React.FC = () => {
     setAlertModal({ isOpen: true, message, onConfirm });
   };
 
+  // Batch this screen created/saved itself; no need to reload it from the server
+  const savedBatchIdRef = useRef<string | null>(null);
+
   // Load Batch Data if editing
   useEffect(() => {
     if (!editBatchId) {
       setIsLoaded(true);
       return;
     }
+    if (savedBatchIdRef.current === editBatchId) {
+      setIsLoaded(true);
+      return;
+    }
 
     const loadData = async () => {
       try {
-        const bId = parseInt(editBatchId);
-        const batch = await db.batches.get(bId);
+        const bId = editBatchId;
+        const batch = await getBatch(bId);
         if (!batch) {
           showAlert("Batch not found", () => navigate('/history'));
           return;
         }
 
-        const donations = await db.donations.where('batchId').equals(bId).toArray();
+        if (batch.status === BatchStatus.Finalized) {
+          showAlert("This batch is finalized. An administrator must unlock it before it can be edited.", () => navigate('/history'));
+          return;
+        }
+
+        const donations = await listDonations(bId);
         
         // Fetch givers to populate inputs
         const giverIds = [...new Set(donations.map(d => d.giverId))];
-        const givers = await db.givers.bulkGet(giverIds);
-        
-        const validGivers = givers.filter((g): g is Giver => !!g);
-        const giverMap = new Map<number, Giver>(validGivers.map(g => [g.id!, g]));
+        const givers = await getGivers(giverIds);
+        const giverMap = new Map<string, Giver>(givers.map(g => [g.id!, g]));
 
         const loadedRows: Row[] = donations.map(d => {
-          let g: Giver | undefined;
-          if (d.giverId === 0) {
-            g = { id: 0, name: 'Loose Giving', envelopeNumber: 0 };
-          } else if (d.giverId === -1) {
-            g = { id: -1, name: 'Internal', envelopeNumber: 1 };
-          } else {
-            g = giverMap.get(d.giverId);
-          }
+          const g = giverMap.get(d.giverId);
 
           const nameDisplay = g ? (g.name2 ? `${g.name} & ${g.name2}` : g.name) : 'Unknown';
           const envDisplay = g ? g.envelopeNumber : '0';
 
           return {
-            id: d.id!, // Use DB ID as key for existing rows
+            id: Math.random(), // React key only
             donationId: d.id,
             giverId: d.giverId,
             inputValue: `${nameDisplay} (#${envDisplay})`,
@@ -387,10 +394,16 @@ const BatchEntry: React.FC = () => {
     }
   };
 
-  const removeRow = (id: number) => {
+  const removeRow = async (id: number) => {
     const row = rows.find(r => r.id === id);
     if (row && row.donationId) {
-      setDeletedRowIds(prev => [...prev, row.donationId!]);
+      // Delete straight away (totals are computed by the server, nothing else to update)
+      try {
+        await deleteDonation(row.donationId);
+      } catch (err: any) {
+        showAlert("Could not delete row: " + (err.message || 'unknown error'));
+        return;
+      }
     }
 
     if (rows.length > 1 || rows.length === 1 && editBatchId) {
@@ -461,7 +474,7 @@ const BatchEntry: React.FC = () => {
       pendingRowRef.current = null;
     }
     if (giver.id) {
-      setNewGiverIds(prev => [...prev, giver.id as number]);
+      setNewGiverIds(prev => [...prev, giver.id as string]);
     }
     setQuickAddName(null);
   };
@@ -473,10 +486,10 @@ const BatchEntry: React.FC = () => {
   const handleSave = async (navigateAway = true): Promise<boolean> => {
     const errors: string[] = [];
     rows.forEach((r, idx) => {
-      const isEmpty = !r.giverId && r.giverId !== 0 && r.giverId !== -1 && !r.amount;
+      const isEmpty = !r.giverId && !r.amount;
       if (isEmpty) return;
 
-      if (!r.giverId && r.giverId !== 0 && r.giverId !== -1) errors.push(`Row ${idx + 1}: No Giver selected.`);
+      if (!r.giverId) errors.push(`Row ${idx + 1}: No Giver selected.`);
       if (!parseFloat(r.amount)) errors.push(`Row ${idx + 1}: Amount is 0.`);
       
       const splitTotal = r.splits.reduce((sum, s) => sum + s.amount, 0);
@@ -512,85 +525,42 @@ const BatchEntry: React.FC = () => {
       return false;
     }
 
+    if (isSaving) return false;
+    setIsSaving(true);
     try {
-      let currentBatchId = editBatchId ? parseInt(editBatchId) : undefined;
-      const newDonationIds: Record<number, number> = {};
+      let currentBatchId = editBatchId || undefined;
+      const newDonationIds: Record<number, string> = {};
 
-      // Use Dexie transaction to ensure atomicity
-      await (db as any).transaction('rw', db.batches, db.donations, async () => {
-        if (currentBatchId && editingBatch) {
-           // --- UPDATE MODE ---
-           await db.batches.update(currentBatchId, {
-             date: date,
-             totalAmount: calculateTotal(),
-             itemCount: rows.length,
-             newGiverIds: newGiverIds
-           });
+      // Rows that hold data, in screen order
+      const kept = rows.filter(row => !(!row.giverId && !parseFloat(row.amount)));
 
-           if (deletedRowIds.length > 0) {
-             await db.donations.bulkDelete(deletedRowIds);
-           }
-
-           for (const row of rows) {
-             const isEmpty = !row.giverId && row.giverId !== 0 && row.giverId !== -1 && !parseFloat(row.amount);
-             if (isEmpty) continue;
-             const amountVal = parseFloat(row.amount) || 0;
-
-             const payload = {
-                giverId: row.giverId!,
-                batchId: currentBatchId,
-                amount: amountVal,
-                date: date,
-                paymentMethod: row.method,
-                chequeNumber: row.method === PaymentMethod.Cheque ? row.chequeNumber : undefined,
-                splits: row.splits,
-                cashCounts: row.method === PaymentMethod.Cash ? row.cashCounts : undefined
-             };
-
-             if (row.donationId) {
-               await db.donations.update(row.donationId, payload);
-             } else {
-               const newId = await db.donations.add(payload);
-               newDonationIds[row.id] = newId as number;
-             }
-           }
-        } else {
-           // --- CREATE MODE ---
-           const newBatchId = await db.batches.add({
-             batchNumber: `B-${Date.now()}`,
-             date: date,
-             status: BatchStatus.Open,
-             source: BatchSource.InPerson,
-             totalAmount: calculateTotal(),
-             itemCount: rows.length,
-             newGiverIds: newGiverIds
-           });
-           currentBatchId = newBatchId as number;
-
-           for (const row of rows) {
-             const isEmpty = !row.giverId && row.giverId !== 0 && row.giverId !== -1 && !parseFloat(row.amount);
-             if (isEmpty) continue;
-             const amountVal = parseFloat(row.amount) || 0;
-             
-             const newId = await db.donations.add({
-               giverId: row.giverId!,
-               batchId: currentBatchId,
-               amount: amountVal,
-               date: date,
-               paymentMethod: row.method,
-               chequeNumber: row.method === PaymentMethod.Cheque ? row.chequeNumber : undefined,
-               splits: row.splits,
-               cashCounts: row.method === PaymentMethod.Cash ? row.cashCounts : undefined
-             });
-             newDonationIds[row.id] = newId as number;
-           }
-        }
+      // One atomic server call: batch + donations + splits, or nothing.
+      const result = await saveBatch({
+        batchId: currentBatchId,
+        date,
+        source: editingBatch?.source,
+        rows: kept.map(row => ({
+          donationId: row.donationId,
+          giverId: row.giverId!,
+          amount: parseFloat(row.amount) || 0,
+          method: row.method,
+          chequeNumber: row.method === PaymentMethod.Cheque ? row.chequeNumber : undefined,
+          splits: row.splits,
+          cashCounts: row.method === PaymentMethod.Cash ? row.cashCounts : undefined,
+        })),
+        deletedDonationIds: [],
+        newGiverIds,
       });
+      currentBatchId = result.batchId;
+      savedBatchIdRef.current = result.batchId;
+      kept.forEach((row, i) => { if (!row.donationId) newDonationIds[row.id] = result.donationIds[i]; });
+      if (!editingBatch) {
+        setEditingBatch({ id: result.batchId } as Batch);
+      }
       
       if (Object.keys(newDonationIds).length > 0) {
          setRows(prev => prev.map(r => newDonationIds[r.id] ? { ...r, donationId: newDonationIds[r.id] } : r));
       }
-      setDeletedRowIds([]);
 
       if (navigateAway) {
         navigate('/history');
@@ -600,10 +570,12 @@ const BatchEntry: React.FC = () => {
         }
       }
       return true;
-    } catch (err) {
+    } catch (err: any) {
       console.error("Batch Save Error:", err);
-      showAlert("Failed to save batch. See console for details.");
+      showAlert("Failed to save batch: " + (err.message || 'unknown error'));
       return false;
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -628,9 +600,9 @@ const BatchEntry: React.FC = () => {
   if (!isLoaded) return <div className="p-8 text-center text-gray-500">Loading batch data...</div>;
 
   return (
-    <div className="space-y-6 h-full flex flex-col relative">
-      {/* Header */}
-      <div className="flex justify-between items-center">
+    <div className="absolute inset-0 flex flex-col -mx-4 px-4 overflow-hidden">
+      {/* Sticky Header */}
+      <div className="flex justify-between items-center sticky top-0 z-40 bg-gray-100 py-3 shrink-0 mb-4 border-b border-gray-200">
         <div>
            {editBatchId ? (
              <div className="flex items-center gap-2">
@@ -639,14 +611,14 @@ const BatchEntry: React.FC = () => {
                 </button>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h2 className="text-3xl font-bold text-gray-800">Edit Batch #{editBatchId}</h2>
+                    <h2 className="text-3xl font-bold text-gray-800">Edit Batch #{shortId(editBatchId)}</h2>
                     {editingBatch && (
                       <span className="flex items-center gap-1 bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded-full font-bold border border-gray-200">
                         {getSourceIcon(editingBatch.source)} {editingBatch.source}
                       </span>
                     )}
                   </div>
-                  <p className="text-gray-500">Modify donations, add records, or delete rows.</p>
+                  <p className="text-gray-500 text-sm">Modify donations, add records, or delete rows.</p>
                 </div>
              </div>
            ) : (
@@ -657,18 +629,29 @@ const BatchEntry: React.FC = () => {
                     <Users className="w-3 h-3" /> {BatchSource.InPerson}
                  </span>
                </div>
-               <p className="text-gray-500">Rapidly process donations with inline tools.</p>
+               <p className="text-gray-500 text-sm">Rapidly process donations with inline tools.</p>
              </div>
            )}
         </div>
-        <div className="bg-church-900 text-white px-6 py-2 rounded-xl text-right shadow-lg">
-          <p className="text-xs uppercase opacity-70">Batch Total</p>
-          <p className="text-2xl font-bold">${calculateTotal().toFixed(2)}</p>
+        
+        <div className="flex items-center gap-4">
+          <div className="bg-white/80 p-1 flex items-center rounded-xl border border-gray-200 text-right shadow-sm px-4 py-2">
+            <div>
+              <p className="text-xs uppercase font-bold text-gray-400">Batch Total</p>
+              <p className="text-2xl font-bold text-church-900">${calculateTotal().toFixed(2)}</p>
+            </div>
+          </div>
+          <button 
+            onClick={() => handleSave(true)}
+            className="bg-church-gold hover:bg-yellow-400 text-church-900 px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-transform active:scale-95 shadow-md"
+          >
+            <Save className="w-5 h-5" /> {editBatchId ? 'Update & Exit' : 'Save & Exit'}
+          </button>
         </div>
       </div>
 
       {/* Grid Container */}
-      <div className="bg-white p-4 rounded-3xl shadow-xl flex-1 flex flex-col overflow-hidden border border-gray-100">
+      <div className="bg-white p-4 rounded-3xl shadow-xl flex-1 flex flex-col overflow-hidden border border-gray-100 mb-4 min-h-0">
         <div className="flex gap-4 mb-4 items-center border-b border-gray-100 pb-4">
           <label className="font-bold text-gray-700">Batch Date:</label>
           <input 
@@ -679,15 +662,15 @@ const BatchEntry: React.FC = () => {
           />
         </div>
 
-        <div className="flex-1 overflow-visible overflow-y-auto min-h-[300px] pb-4">
+        <div className="flex-1 overflow-visible overflow-y-auto min-h-0 pb-4">
           <table className="w-full text-left border-collapse">
             <thead className="bg-gray-50 sticky top-0 z-40 text-gray-600">
               <tr>
-                <th className="p-3 text-sm font-bold rounded-tl-xl w-1/3">Giver Lookup</th>
-                <th className="p-3 text-sm font-bold w-32">Amount</th>
-                <th className="p-3 text-sm font-bold w-48">Method</th>
-                <th className="p-3 text-sm font-bold">Allocations</th>
-                <th className="p-3 text-sm font-bold rounded-tr-xl w-16"></th>
+                <th className="py-2 px-2 text-base font-bold rounded-tl-xl w-1/3">Giver Lookup</th>
+                <th className="py-2 px-2 text-base font-bold w-32">Amount</th>
+                <th className="py-2 px-2 text-base font-bold w-48">Method</th>
+                <th className="py-2 px-2 text-base font-bold">Allocations</th>
+                <th className="py-2 px-2 text-base font-bold rounded-tr-xl w-16"></th>
               </tr>
             </thead>
             <tbody>
@@ -699,7 +682,7 @@ const BatchEntry: React.FC = () => {
                 return (
                   <tr key={row.id} className="border-b border-gray-50 last:border-0 hover:bg-blue-50/30 transition-colors group align-top">
                     {/* Giver Search Column */}
-                    <td className="p-2 relative z-10">
+                    <td className="p-1 relative z-10">
                       <GiverInput 
                         rowId={row.id}
                         value={row.inputValue}
@@ -709,19 +692,20 @@ const BatchEntry: React.FC = () => {
                         onCreate={(name) => handleCreateGiverStart(row.id, name)}
                         onClear={() => updateRow(row.id, { giverId: undefined, inputValue: '' })}
                         givers={allGivers}
+                        systemGivers={systemGivers}
                         autoFocus={index === rows.length - 1 && index > 0}
                       />
                     </td>
                     
                     {/* Amount Column */}
-                    <td className="p-2">
+                    <td className="p-1">
                       <div className="relative">
-                        <span className="absolute left-3 top-2 text-gray-400 font-bold">$</span>
+                        <span className="absolute left-3 top-1.5 text-gray-400 font-bold">$</span>
                         <input 
                           id={`amount-${row.id}`}
                           type="number"
                           step="0.01"
-                          className={`w-full pl-6 p-2 rounded-lg border text-sm font-bold outline-none focus:ring-2 focus:ring-church-500 ${isUnbalanced ? 'border-red-300 bg-red-50 text-red-600' : 'border-gray-400 bg-gray-50 text-gray-800'}`}
+                          className={`w-full pl-6 p-1.5 rounded-lg border text-base font-bold outline-none focus:ring-2 focus:ring-church-500 ${isUnbalanced ? 'border-red-300 bg-red-50 text-red-600' : 'border-gray-400 bg-gray-50 text-gray-800'}`}
                           value={row.amount}
                           onChange={(e) => updateRow(row.id, { amount: e.target.value })}
                           placeholder="0.00"
@@ -730,10 +714,10 @@ const BatchEntry: React.FC = () => {
                     </td>
 
                     {/* Method Column */}
-                    <td className="p-2">
+                    <td className="p-1">
                        <div className="flex gap-2">
                         <select 
-                          className={`p-2 rounded-lg border border-gray-400 bg-gray-50 text-sm outline-none focus:ring-2 focus:ring-church-500 transition-all ${row.method === PaymentMethod.Cheque ? 'w-1/2' : 'flex-1'}`}
+                          className={`p-1.5 rounded-lg border border-gray-400 bg-gray-50 text-base outline-none focus:ring-2 focus:ring-church-500 transition-all ${row.method === PaymentMethod.Cheque ? 'w-1/2' : 'flex-1'}`}
                           value={row.method}
                           onChange={(e) => updateRow(row.id, { method: e.target.value as PaymentMethod })}
                         >
@@ -745,7 +729,7 @@ const BatchEntry: React.FC = () => {
                           <input 
                             type="text" 
                             placeholder="Chq #" 
-                            className="w-1/2 p-2 rounded-lg border border-gray-400 bg-gray-50 text-sm outline-none focus:ring-2 focus:ring-church-500"
+                            className="w-1/2 p-1.5 rounded-lg border border-gray-400 bg-gray-50 text-base outline-none focus:ring-2 focus:ring-church-500"
                             value={row.chequeNumber}
                             onChange={(e) => updateRow(row.id, { chequeNumber: e.target.value })}
                           />
@@ -755,7 +739,7 @@ const BatchEntry: React.FC = () => {
                         {row.method === PaymentMethod.Cash && (
                           <button 
                             onClick={() => setCashRowId(row.id)}
-                            className={`p-2 rounded-lg transition-colors border ${cashMismatch ? 'bg-red-100 text-red-500 border-red-400' : 'bg-gray-100 text-gray-400 hover:bg-church-100 hover:text-church-500 border-gray-400'}`}
+                            className={`p-1.5 px-2 rounded-lg transition-colors border ${cashMismatch ? 'bg-red-100 text-red-500 border-red-400' : 'bg-gray-100 text-gray-400 hover:bg-church-100 hover:text-church-500 border-gray-400'}`}
                             title="Cash Denominations"
                             tabIndex={-1}
                           >
@@ -766,11 +750,11 @@ const BatchEntry: React.FC = () => {
                     </td>
 
                     {/* Allocations (Split) Column */}
-                    <td className="p-2">
+                    <td className="p-1">
                       <button 
                         onClick={() => setSplitRowId(row.id)}
                         onKeyDown={(e) => handleKeyDown(e, index)}
-                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium border transition-all flex items-center justify-between outline-none focus:ring-2 focus:ring-church-500 ${
+                        className={`w-full text-left px-2 py-1.5 rounded-lg text-base font-medium border transition-all flex items-center justify-between outline-none focus:ring-2 focus:ring-church-500 ${
                           isUnbalanced 
                             ? 'bg-red-50 border-red-400 text-red-700' 
                             : 'bg-white border-gray-400 text-gray-600 hover:border-church-500'
@@ -791,10 +775,10 @@ const BatchEntry: React.FC = () => {
                     </td>
 
                     {/* Delete Action */}
-                    <td className="p-2 text-center">
+                    <td className="p-1 text-center">
                       <button 
                         onClick={() => removeRow(row.id)}
-                        className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                        className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                         tabIndex={-1}
                         title="Delete Donation"
                       >
@@ -817,15 +801,6 @@ const BatchEntry: React.FC = () => {
           <div ref={bottomRef} className="h-4" />
         </div>
 
-        {/* Footer Actions */}
-        <div className="p-4 border-t border-gray-100 flex justify-end bg-gray-50 rounded-b-3xl mt-auto z-50 relative">
-          <button 
-            onClick={() => handleSave(true)}
-            className="bg-church-gold hover:bg-yellow-400 text-church-900 px-8 py-3 rounded-xl font-bold shadow-lg flex items-center gap-2 transition-transform active:scale-95"
-          >
-            <Save className="w-5 h-5" /> {editBatchId ? 'Update Batch & Exit' : 'Save Batch & Exit'}
-          </button>
-        </div>
       </div>
 
       {/* --- Modals --- */}
@@ -903,6 +878,7 @@ const BatchEntry: React.FC = () => {
 const QuickAddGiverModal: React.FC<{ name: string, onClose: () => void, onSave: (g: Giver) => void }> = ({ name, onClose, onSave }) => {
   const [nextEnv, setNextEnv] = useState<number>(0);
   const [address, setAddress] = useState<string>('');
+  const [error, setError] = useState('');
   
   useEffect(() => {
     getNextEnvelopeNumber().then(setNextEnv).catch(err => console.error("Failed to get next envelope:", err));
@@ -910,31 +886,25 @@ const QuickAddGiverModal: React.FC<{ name: string, onClose: () => void, onSave: 
 
   const handleConfirm = async () => {
     try {
-      const id = await db.givers.add({
-        envelopeNumber: nextEnv,
-        name: name,
-        email: '',
-        address1: address,
-      });
-      await incrementEnvelopeNumber();
-      onSave({ id: id as number, envelopeNumber: nextEnv, name, address1: address });
-    } catch (err) {
+      // The server assigns the envelope number atomically; show what it actually gave.
+      const giver = await addGiver({ name, address1: address || undefined } as Giver);
+      onSave(giver);
+    } catch (err: any) {
       console.error("Failed to create giver:", err);
-      // We can't use showAlert here because it's not passed down.
-      // But we can log it and maybe show a simple error message in the modal if we had state for it.
-      // For now, let's just log it to prevent uncaught promise rejection.
+      setError(err.message || 'Could not create giver');
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl animate-fade-in-up">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-2">
+      <div className="bg-white rounded-3xl p-4 w-full max-w-sm shadow-2xl animate-fade-in-up">
         <h3 className="text-xl font-bold mb-4 text-gray-800">Quick Register Giver</h3>
         <div className="bg-blue-50 p-4 rounded-xl mb-4 text-center">
           <p className="text-xs font-bold text-church-900 uppercase">New Giver</p>
           <p className="text-xl font-bold text-gray-800">{name}</p>
           <p className="text-sm text-church-500 font-bold mt-1">Assigning Envelope #{nextEnv}</p>
         </div>
+        {error && <div className="bg-red-50 text-red-600 p-2 rounded-lg text-sm mb-4">{error}</div>}
         
         <div className="mb-4">
           <label className="block text-sm font-bold text-gray-700 mb-1">Address (Optional)</label>
@@ -981,7 +951,7 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode, fallbac
   }
 }
 
-const SplitModal: React.FC<{ row: Row, internalAccounts: { id?: number, name: string }[], onClose: () => void, onSave: (s: DonationSplit[]) => void }> = ({ row, internalAccounts, onClose, onSave }) => {
+const SplitModal: React.FC<{ row: Row, internalAccounts: { id?: string, name: string }[], onClose: () => void, onSave: (s: DonationSplit[]) => void }> = ({ row, internalAccounts, onClose, onSave }) => {
   // Safety check: ensure row and splits exist
   const initialSplits = row && Array.isArray(row.splits) ? row.splits : [{ fund: 'General', amount: 0 }];
   
@@ -996,10 +966,7 @@ const SplitModal: React.FC<{ row: Row, internalAccounts: { id?: number, name: st
   const totalAmount = parseFloat(row.amount) || 0;
   
   // Fetch active funds
-  const funds = useLiveQuery(async () => {
-    const allFunds = await db.funds.toArray();
-    return allFunds.filter(f => f.isActive);
-  }) || [];
+  const funds = (useLive(listFunds) || []).filter(f => f.isActive);
   
   // Recalculate remaining logic
   const currentAllocated = splits.reduce((sum, s) => {
@@ -1035,11 +1002,11 @@ const SplitModal: React.FC<{ row: Row, internalAccounts: { id?: number, name: st
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
       <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden animate-fade-in-up">
-        <div className="bg-church-900 p-4 flex justify-between items-center text-white">
+        <div className="bg-church-900 p-3 flex justify-between items-center text-white">
           <h3 className="font-bold text-lg flex items-center gap-2"><Layers className="w-5 h-5 text-church-gold" /> Designations</h3>
           <button onClick={onClose}><X className="w-6 h-6" /></button>
         </div>
-        <div className="p-6">
+        <div className="p-4">
           <div className="flex justify-between items-end mb-4 border-b pb-2">
             <div><p className="text-sm text-gray-500">Total Donation</p><p className="text-2xl font-bold text-gray-800">${totalAmount.toFixed(2)}</p></div>
             <div className={`text-right ${isBalanced ? 'text-green-600' : 'text-red-500'}`}>
@@ -1103,8 +1070,8 @@ const CashModal: React.FC<{ row: Row, onClose: () => void, onSave: (c: Record<st
           <h3 className="font-bold text-lg flex items-center gap-2"><Calculator className="w-5 h-5 text-white" /> Cash Counter</h3>
           <button onClick={onClose}><X className="w-6 h-6" /></button>
         </div>
-        <div className="p-6 overflow-y-auto flex-1">
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-6">
+        <div className="p-4 overflow-y-auto flex-1">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
              {DENOMINATIONS.map(denom => (
                <div key={denom} className="bg-gray-50 p-3 rounded-xl border border-gray-100 text-center">
                  <label className="text-xs font-bold text-gray-400 block mb-1">${denom}</label>
@@ -1113,7 +1080,7 @@ const CashModal: React.FC<{ row: Row, onClose: () => void, onSave: (c: Record<st
                </div>
              ))}
           </div>
-          <div className="bg-gray-50 p-6 rounded-2xl flex flex-col md:flex-row justify-between items-center gap-4">
+          <div className="bg-gray-50 p-4 rounded-xl flex flex-col md:flex-row justify-between items-center gap-2">
              <div><p className="text-sm text-gray-500 font-medium">Slip Amount</p><p className="text-2xl font-bold text-gray-800">${target.toFixed(2)}</p></div>
              <div className="hidden md:block text-gray-300 text-4xl font-light">/</div>
              <div className="text-center"><p className="text-sm text-gray-500 font-medium">Cash Counted</p><p className="text-2xl font-bold text-church-900">${total.toFixed(2)}</p></div>

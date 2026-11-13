@@ -1,15 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../services/db';
+import { formatDate } from '../utils/date';
+import { useLive, listAllDonations, countGivers, countBatches } from '../services/repo';
 import { generateFinancialInsight } from '../services/geminiService';
 import { Donation } from '../types';
 import { TrendingUp, Users, Wallet, Archive, Sparkles } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 const Dashboard: React.FC = () => {
-  const donations = useLiveQuery(() => db.donations.toArray());
-  const giversCount = useLiveQuery(() => db.givers.count());
-  const batchesCount = useLiveQuery(() => db.batches.count());
+  const donations = useLive(listAllDonations);
+  const giversCount = useLive(countGivers);
+  const batchesCount = useLive(countBatches);
   
   const [insight, setInsight] = useState<string>("Analyzing vault data...");
   const [totalValue, setTotalValue] = useState(0);
@@ -21,7 +21,7 @@ const Dashboard: React.FC = () => {
 
       // Only call AI if we have data to analyze to save tokens/calls
       if (donations.length > 0) {
-        generateFinancialInsight(total, batchesCount || 0, donations.slice(-5))
+        generateFinancialInsight(total, batchesCount || 0, donations.length)
           .then(setInsight);
       } else {
         setInsight("Vault is empty. Start by adding a batch.");
@@ -31,12 +31,12 @@ const Dashboard: React.FC = () => {
 
   // Prepare chart data (Last 5 donations for visual)
   const chartData = donations?.slice(-7).map((d, i) => ({
-    name: `Tx ${d.id}`,
+    name: `Tx ${i + 1}`,
     amount: d.amount,
   })) || [];
 
   return (
-    <div className="space-y-8 animate-fade-in">
+    <div className="space-y-4 animate-fade-in">
       <header>
         <h2 className="text-3xl font-bold text-gray-800">Vault Overview</h2>
         <p className="text-gray-500">Welcome back, Treasurer.</p>
@@ -92,7 +92,7 @@ const Dashboard: React.FC = () => {
       </div>
 
       {/* Recent Activity & Chart */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="bg-white p-6 rounded-3xl shadow-xl border border-gray-100">
           <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
             <TrendingUp className="w-5 h-5 text-church-500" />
@@ -128,7 +128,7 @@ const Dashboard: React.FC = () => {
                <div key={d.id} className="flex justify-between items-center p-3 hover:bg-gray-50 rounded-xl transition-colors border-b border-gray-50 last:border-0">
                  <div>
                    <p className="font-semibold text-gray-800">Donation #{d.id}</p>
-                   <p className="text-xs text-gray-500">{new Date(d.date).toLocaleDateString()}</p>
+                   <p className="text-xs text-gray-500">{formatDate(d.date)}</p>
                  </div>
                  <span className="font-bold text-church-900 bg-blue-50 px-3 py-1 rounded-lg">
                    ${d.amount.toFixed(2)}

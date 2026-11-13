@@ -1,7 +1,13 @@
 import React, { useState } from 'react';
-import { exportData, importData, exportGiversCSV, importGiversCSV, db } from '../services/db';
+import {
+  useLive, getSettings, updateSettings as saveSettings, listFunds, addFund, setFundActive,
+  listInternalAccounts, addInternalAccount, setInternalAccountActive, listGivers, importGiversCSV,
+  exportBackup, importLegacyBackup, getSmtpSettings, setSmtpSettings,
+} from '../services/repo';
+import { giversToCSV } from '../services/csv';
+import { useAuth } from '../contexts/AuthContext';
+import { UserRole } from '../types';
 import { Download, Upload, RefreshCw, AlertTriangle, Layers, Plus, Trash2, CheckCircle, XCircle, Users, FileText, Mail, Landmark, Image as ImageIcon } from 'lucide-react';
-import { useLiveQuery } from 'dexie-react-hooks';
 
 const Settings: React.FC = () => {
   const [backupUrl, setBackupUrl] = useState<string | null>(null);
@@ -16,9 +22,53 @@ const Settings: React.FC = () => {
     onCancel?: () => void;
   }>({ isOpen: false, type: 'alert', message: '' });
   
-  const settings = useLiveQuery(() => db.settings.orderBy('id').first());
-  const funds = useLiveQuery(() => db.funds.toArray());
-  const internalAccounts = useLiveQuery(() => db.internalAccounts.toArray());
+  const { user } = useAuth();
+  const isAdmin = user?.role === UserRole.Administrator;
+  const settings = useLive(getSettings);
+  const funds = useLive(listFunds);
+  const internalAccounts = useLive(listInternalAccounts);
+  const smtp = useLive(() => isAdmin ? getSmtpSettings() : Promise.resolve(null), [isAdmin]);
+
+  // Text fields edit a local draft and save when the field loses focus, so
+  // typing doesn't send a network write (and an audit entry) per keystroke.
+  const [draft, setDraft] = useState<Record<string, any>>({});
+  const [draftLoaded, setDraftLoaded] = useState(false);
+  React.useEffect(() => {
+    if (settings && smtp !== undefined && !draftLoaded) {
+      setDraft({
+        ...settings,
+        smtpHost: smtp?.host ?? '', smtpPort: smtp?.port ?? '', smtpUser: smtp?.username ?? '',
+        smtpFrom: smtp?.fromAddress ?? '', smtpPassword: '',
+      });
+      setDraftLoaded(true);
+    }
+  }, [settings, smtp, draftLoaded]);
+  const setField = (k: string, v: any) => setDraft(d => ({ ...d, [k]: v }));
+  const SMTP_FIELDS = ['smtpHost', 'smtpPort', 'smtpUser', 'smtpPassword', 'smtpFrom'];
+
+  const commitSmtp = async () => {
+    const { smtpHost, smtpPort, smtpUser, smtpPassword, smtpFrom } = draft;
+    if (!smtpHost || !smtpPort || !smtpUser || !smtpFrom) return; // save once the required fields are filled
+    if (!smtpPassword && !smtp?.hasPassword) return;
+    try {
+      await setSmtpSettings({ host: smtpHost, port: Number(smtpPort), username: smtpUser, fromAddress: smtpFrom, password: smtpPassword || undefined });
+      setField('smtpPassword', '');
+    } catch (err: any) {
+      showAlert('Failed to save email settings: ' + err.message);
+    }
+  };
+
+  const commitField = async (k: string) => {
+    if (SMTP_FIELDS.includes(k)) return commitSmtp();
+    if (!settings) return;
+    const v = draft[k];
+    if (k === 'nextEnvelopeNumber') {
+      const num = parseInt(v);
+      if (!isNaN(num) && num !== settings.nextEnvelopeNumber) await updateSettings({ nextEnvelopeNumber: num });
+      return;
+    }
+    if ((v ?? '') !== ((settings as any)[k] ?? '')) await updateSettings({ [k]: v });
+  };
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const showConfirm = (message: string): Promise<boolean> => {
@@ -49,7 +99,7 @@ const Settings: React.FC = () => {
   };
 
   const handleBackup = async () => {
-    const json = await exportData();
+    const json = await exportBackup();
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     setBackupUrl(url);
@@ -59,25 +109,35 @@ const Settings: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
     
-    const confirmed = await showConfirm("WARNING: This will overwrite all current data. Proceed?");
-    if(!confirmed) return;
+    const confirmed = await showConfirm("Import this backup from the original (browser-only) SafeTrack into this church? This only works for a church with no batches yet. User accounts are not imported; invite them under User Management.");
+    if(!confirmed) { e.target.value = ''; return; }
 
     const reader = new FileReader();
     reader.onload = async (event) => {
       const json = event.target?.result as string;
       try {
-        await importData(json);
-        window.location.reload();
-      } catch (err) {
+        const r = await importLegacyBackup(json);
+        const notes = [
+          r.renumbered_duplicate_envelopes ? `${r.renumbered_duplicate_envelopes} duplicate envelope #s were given new numbers` : '',
+          r.fixed_missing_cheque_numbers ? `${r.fixed_missing_cheque_numbers} cheques had no number (marked UNKNOWN)` : '',
+          r.skipped_donations_unknown_giver ? `${r.skipped_donations_unknown_giver} donations skipped (giver missing from backup)` : '',
+          r.users_not_imported ? `${r.users_not_imported} user accounts need to be re-created` : '',
+        ].filter(Boolean);
+        showAlert(`Imported ${r.givers} givers, ${r.batches} batches (${r.finalized_batches} finalized) and ${r.donations} donations.` +
+                  (notes.length ? `\n\nPlease review:\n• ${notes.join('\n• ')}` : ''));
+        setDraftLoaded(false);
+      } catch (err: any) {
         console.error("Restore error:", err);
-        showAlert("Error restoring data. Invalid file format.");
+        showAlert("Import failed: " + (err.message || 'invalid file'));
+      } finally {
+        e.target.value = '';
       }
     };
     reader.readAsText(file);
   };
 
   const handleExportGivers = async () => {
-    const csv = await exportGiversCSV();
+    const csv = giversToCSV(await listGivers());
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -104,7 +164,7 @@ const Settings: React.FC = () => {
 
       console.log("File selected:", file.name, file.size, file.type);
 
-      const confirmed = await showConfirm(`Ready to import ${file.name}? This will REPLACE the entire Giver Registry. Proceed?`);
+      const confirmed = await showConfirm(`Ready to import ${file.name}? Givers are matched by envelope number: existing ones are updated, new ones added. Nobody is deleted. Proceed?`);
       
       if (!confirmed) {
         if (fileInputRef.current) fileInputRef.current.value = '';
@@ -120,9 +180,8 @@ const Settings: React.FC = () => {
         const csv = event.target?.result as string;
         try {
           console.log("Parsing CSV...");
-          const count = await importGiversCSV(csv);
-          console.log("Import successful, count:", count);
-          showAlert(`Giver Registry imported successfully! ${count} givers added.`);
+          const { added, updated } = await importGiversCSV(csv);
+          showAlert(`Giver Registry imported: ${added} added, ${updated} updated.`);
         } catch (err: any) {
           console.error("Import error object:", err);
           let errorMessage = "Unknown error";
@@ -161,26 +220,12 @@ const Settings: React.FC = () => {
     }
   };
 
-  const updateEnvelope = async (val: string) => {
-    const num = parseInt(val);
-    if (settings && settings.id && !isNaN(num)) {
-      try {
-        await db.settings.update(settings.id, { nextEnvelopeNumber: num });
-      } catch (err) {
-        console.error("Failed to update envelope number:", err);
-        showAlert("Failed to update envelope number.");
-      }
-    }
-  };
-
-  const updateSettings = async (updates: Partial<typeof settings>) => {
-    if (settings && settings.id) {
-      try {
-        await db.settings.update(settings.id, updates);
-      } catch (err) {
-        console.error("Failed to update settings:", err);
-        showAlert("Failed to update settings.");
-      }
+  const updateSettings = async (updates: Record<string, any>) => {
+    try {
+      await saveSettings(updates);
+    } catch (err: any) {
+      console.error("Failed to update settings:", err);
+      showAlert("Failed to update settings: " + err.message);
     }
   };
 
@@ -191,6 +236,7 @@ const Settings: React.FC = () => {
     const reader = new FileReader();
     reader.onload = async (event) => {
       const base64 = event.target?.result as string;
+      setField(field, base64);
       await updateSettings({ [field]: base64 });
     };
     reader.readAsDataURL(file);
@@ -208,11 +254,7 @@ const Settings: React.FC = () => {
     }
 
     try {
-      await db.funds.add({
-        name: newFundName.trim(),
-        isSystem: false,
-        isActive: true
-      });
+      await addFund(newFundName.trim());
       setNewFundName('');
     } catch (err) {
       console.error("Failed to add fund:", err);
@@ -220,9 +262,9 @@ const Settings: React.FC = () => {
     }
   };
 
-  const toggleFundStatus = async (id: number, currentStatus: boolean) => {
+  const toggleFundStatus = async (id: string, currentStatus: boolean) => {
     try {
-      await db.funds.update(id, { isActive: !currentStatus });
+      await setFundActive(id, !currentStatus);
     } catch (err) {
       console.error("Failed to toggle fund status:", err);
       showAlert("Failed to update fund status.");
@@ -241,10 +283,7 @@ const Settings: React.FC = () => {
     }
 
     try {
-      await db.internalAccounts.add({
-        name: newInternalAccountName.trim(),
-        isActive: true
-      });
+      await addInternalAccount(newInternalAccountName.trim());
       setNewInternalAccountName('');
     } catch (err) {
       console.error("Failed to add internal account:", err);
@@ -252,9 +291,9 @@ const Settings: React.FC = () => {
     }
   };
 
-  const toggleInternalAccountStatus = async (id: number, currentStatus: boolean) => {
+  const toggleInternalAccountStatus = async (id: string, currentStatus: boolean) => {
     try {
-      await db.internalAccounts.update(id, { isActive: !currentStatus });
+      await setInternalAccountActive(id, !currentStatus);
     } catch (err) {
       console.error("Failed to toggle internal account status:", err);
       showAlert("Failed to update internal account status.");
@@ -277,10 +316,27 @@ const Settings: React.FC = () => {
             <input 
               type="number" 
               className="w-full p-4 rounded-xl border border-gray-400 text-2xl font-bold text-church-900 focus:ring-2 focus:ring-church-500 bg-gray-50"
-              value={settings?.nextEnvelopeNumber || 100}
-              onChange={(e) => updateEnvelope(e.target.value)}
+              value={draft.nextEnvelopeNumber ?? ''}
+              onChange={(e) => setField('nextEnvelopeNumber', e.target.value)}
+              onBlur={() => commitField('nextEnvelopeNumber')}
             />
             <p className="text-xs text-gray-400 mt-2">Will be used for the next new giver registration.</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Counting Controls</label>
+            <label className="flex items-start gap-3 p-4 rounded-xl border border-gray-300 bg-gray-50 cursor-pointer">
+              <input
+                type="checkbox"
+                className="mt-1 w-5 h-5"
+                disabled={!isAdmin}
+                checked={!(settings?.allowAdminSoloFinalize ?? true)}
+                onChange={(e) => updateSettings({ allowAdminSoloFinalize: !e.target.checked })}
+              />
+              <span className="text-sm text-gray-700">
+                <strong>Strict two-person control.</strong> Administrators also need a second person
+                to sign off before a batch can be finalized. Enforced by the server.
+              </span>
+            </label>
           </div>
         </div>
       </div>
@@ -303,7 +359,7 @@ const Settings: React.FC = () => {
                   <div className="relative w-32 h-20 border rounded-lg overflow-hidden bg-gray-50 flex items-center justify-center">
                     <img src={settings.bankLogo} alt="Bank Logo" className="max-w-full max-h-full object-contain" />
                     <button 
-                      onClick={() => updateSettings({ bankLogo: '' })}
+                      onClick={() => { setField('bankLogo', ''); updateSettings({ bankLogo: '' }); }}
                       className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
                       title="Remove Logo"
                     >
@@ -328,8 +384,9 @@ const Settings: React.FC = () => {
               <input 
                 type="text" 
                 className="w-full p-3 rounded-xl border border-gray-400 bg-gray-50 focus:ring-2 focus:ring-church-500"
-                value={settings?.accountOf || ''}
-                onChange={(e) => updateSettings({ accountOf: e.target.value })}
+                value={draft.accountOf ?? ''}
+                onChange={(e) => setField('accountOf', e.target.value)}
+                onBlur={() => commitField('accountOf')}
                 placeholder="First Church of Example"
               />
             </div>
@@ -340,8 +397,9 @@ const Settings: React.FC = () => {
                 <input 
                   type="text" 
                   className="w-full p-3 rounded-xl border border-gray-400 bg-gray-50 focus:ring-2 focus:ring-church-500"
-                  value={settings?.branchNumber || ''}
-                  onChange={(e) => updateSettings({ branchNumber: e.target.value })}
+                  value={draft.branchNumber ?? ''}
+                  onChange={(e) => setField('branchNumber', e.target.value)}
+                  onBlur={() => commitField('branchNumber')}
                   placeholder="12345"
                 />
               </div>
@@ -350,8 +408,9 @@ const Settings: React.FC = () => {
                 <input 
                   type="text" 
                   className="w-full p-3 rounded-xl border border-gray-400 bg-gray-50 focus:ring-2 focus:ring-church-500"
-                  value={settings?.accountNumber || ''}
-                  onChange={(e) => updateSettings({ accountNumber: e.target.value })}
+                  value={draft.accountNumber ?? ''}
+                  onChange={(e) => setField('accountNumber', e.target.value)}
+                  onBlur={() => commitField('accountNumber')}
                   placeholder="000-1234567"
                 />
               </div>
@@ -369,7 +428,7 @@ const Settings: React.FC = () => {
                   <div className="relative w-32 h-20 border rounded-lg overflow-hidden bg-gray-50 flex items-center justify-center">
                     <img src={settings.churchLogo} alt="Church Logo" className="max-w-full max-h-full object-contain" />
                     <button 
-                      onClick={() => updateSettings({ churchLogo: '' })}
+                      onClick={() => { setField('churchLogo', ''); updateSettings({ churchLogo: '' }); }}
                       className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
                       title="Remove Logo"
                     >
@@ -394,8 +453,9 @@ const Settings: React.FC = () => {
               <input 
                 type="text" 
                 className="w-full p-3 rounded-xl border border-gray-400 bg-gray-50 focus:ring-2 focus:ring-church-500"
-                value={settings?.churchAddressLine1 || ''}
-                onChange={(e) => updateSettings({ churchAddressLine1: e.target.value })}
+                value={draft.churchAddressLine1 ?? ''}
+                onChange={(e) => setField('churchAddressLine1', e.target.value)}
+                onBlur={() => commitField('churchAddressLine1')}
                 placeholder="123 Main St"
               />
             </div>
@@ -404,8 +464,9 @@ const Settings: React.FC = () => {
               <input 
                 type="text" 
                 className="w-full p-3 rounded-xl border border-gray-400 bg-gray-50 focus:ring-2 focus:ring-church-500"
-                value={settings?.churchAddressLine2 || ''}
-                onChange={(e) => updateSettings({ churchAddressLine2: e.target.value })}
+                value={draft.churchAddressLine2 ?? ''}
+                onChange={(e) => setField('churchAddressLine2', e.target.value)}
+                onBlur={() => commitField('churchAddressLine2')}
                 placeholder="Suite 100"
               />
             </div>
@@ -414,8 +475,9 @@ const Settings: React.FC = () => {
               <input 
                 type="text" 
                 className="w-full p-3 rounded-xl border border-gray-400 bg-gray-50 focus:ring-2 focus:ring-church-500"
-                value={settings?.churchAddressLine3 || ''}
-                onChange={(e) => updateSettings({ churchAddressLine3: e.target.value })}
+                value={draft.churchAddressLine3 ?? ''}
+                onChange={(e) => setField('churchAddressLine3', e.target.value)}
+                onBlur={() => commitField('churchAddressLine3')}
                 placeholder="City, State, ZIP"
               />
             </div>
@@ -435,8 +497,9 @@ const Settings: React.FC = () => {
             <input 
               type="text" 
               className="w-full p-3 rounded-xl border border-gray-400 bg-gray-50 focus:ring-2 focus:ring-church-500"
-              value={settings?.smtpHost || ''}
-              onChange={(e) => updateSettings({ smtpHost: e.target.value })}
+              value={draft.smtpHost ?? ''}
+              onChange={(e) => setField('smtpHost', e.target.value)}
+              onBlur={() => commitField('smtpHost')}
               placeholder="smtp.example.com"
             />
           </div>
@@ -445,8 +508,9 @@ const Settings: React.FC = () => {
             <input 
               type="number" 
               className="w-full p-3 rounded-xl border border-gray-400 bg-gray-50 focus:ring-2 focus:ring-church-500"
-              value={settings?.smtpPort || ''}
-              onChange={(e) => updateSettings({ smtpPort: parseInt(e.target.value) || undefined })}
+              value={draft.smtpPort ?? ''}
+              onChange={(e) => setField('smtpPort', e.target.value)}
+              onBlur={() => commitField('smtpPort')}
               placeholder="587"
             />
           </div>
@@ -455,8 +519,9 @@ const Settings: React.FC = () => {
             <input 
               type="text" 
               className="w-full p-3 rounded-xl border border-gray-400 bg-gray-50 focus:ring-2 focus:ring-church-500"
-              value={settings?.smtpUser || ''}
-              onChange={(e) => updateSettings({ smtpUser: e.target.value })}
+              value={draft.smtpUser ?? ''}
+              onChange={(e) => setField('smtpUser', e.target.value)}
+              onBlur={() => commitField('smtpUser')}
               placeholder="user@example.com"
             />
           </div>
@@ -465,9 +530,11 @@ const Settings: React.FC = () => {
             <input 
               type="password" 
               className="w-full p-3 rounded-xl border border-gray-400 bg-gray-50 focus:ring-2 focus:ring-church-500"
-              value={settings?.smtpPassword || ''}
-              onChange={(e) => updateSettings({ smtpPassword: e.target.value })}
-              placeholder="••••••••"
+              value={draft.smtpPassword ?? ''}
+              autoComplete="new-password"
+              placeholder={smtp?.hasPassword ? '•••••••• saved; type to replace' : ''}
+              onChange={(e) => setField('smtpPassword', e.target.value)}
+              onBlur={() => commitField('smtpPassword')}
             />
           </div>
           <div className="md:col-span-2">
@@ -475,8 +542,9 @@ const Settings: React.FC = () => {
             <input 
               type="email" 
               className="w-full p-3 rounded-xl border border-gray-400 bg-gray-50 focus:ring-2 focus:ring-church-500"
-              value={settings?.smtpFrom || ''}
-              onChange={(e) => updateSettings({ smtpFrom: e.target.value })}
+              value={draft.smtpFrom ?? ''}
+              onChange={(e) => setField('smtpFrom', e.target.value)}
+              onBlur={() => commitField('smtpFrom')}
               placeholder="noreply@church.com"
             />
           </div>
@@ -489,8 +557,9 @@ const Settings: React.FC = () => {
             <input 
               type="text" 
               className="w-full p-3 rounded-xl border border-gray-400 bg-gray-50 focus:ring-2 focus:ring-church-500"
-              value={settings?.accountingRecipients || ''}
-              onChange={(e) => updateSettings({ accountingRecipients: e.target.value })}
+              value={draft.accountingRecipients ?? ''}
+              onChange={(e) => setField('accountingRecipients', e.target.value)}
+              onBlur={() => commitField('accountingRecipients')}
               placeholder="treasurer@church.com, pastor@church.com"
             />
           </div>
@@ -499,8 +568,9 @@ const Settings: React.FC = () => {
             <input 
               type="text" 
               className="w-full p-3 rounded-xl border border-gray-400 bg-gray-50 focus:ring-2 focus:ring-church-500"
-              value={settings?.envelopeRecipients || ''}
-              onChange={(e) => updateSettings({ envelopeRecipients: e.target.value })}
+              value={draft.envelopeRecipients ?? ''}
+              onChange={(e) => setField('envelopeRecipients', e.target.value)}
+              onBlur={() => commitField('envelopeRecipients')}
               placeholder="envelopesteward@church.com"
             />
           </div>
@@ -509,8 +579,9 @@ const Settings: React.FC = () => {
             <input 
               type="text" 
               className="w-full p-3 rounded-xl border border-gray-400 bg-gray-50 focus:ring-2 focus:ring-church-500"
-              value={settings?.depositRecipients || ''}
-              onChange={(e) => updateSettings({ depositRecipients: e.target.value })}
+              value={draft.depositRecipients ?? ''}
+              onChange={(e) => setField('depositRecipients', e.target.value)}
+              onBlur={() => commitField('depositRecipients')}
               placeholder="treasurer@church.com"
             />
           </div>
@@ -659,8 +730,8 @@ const Settings: React.FC = () => {
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <div className="bg-white/10 p-6 rounded-2xl backdrop-blur-sm">
-            <h4 className="font-bold text-lg mb-2">Backup Vault</h4>
-            <p className="text-sm text-gray-300 mb-4">Export all data (Givers, Donations, Batches) to a secure JSON file.</p>
+            <h4 className="font-bold text-lg mb-2">Download a Copy</h4>
+            <p className="text-sm text-gray-300 mb-4">Your data is stored and backed up in the cloud. Download a copy of everything (givers, batches, donations, sign-offs) as a JSON file for your own records.</p>
             <button 
               onClick={handleBackup}
               className="w-full bg-church-gold text-church-900 font-bold py-3 rounded-xl hover:bg-yellow-400 transition-colors flex justify-center gap-2 items-center"
@@ -679,10 +750,10 @@ const Settings: React.FC = () => {
           </div>
 
           <div className="bg-white/10 p-6 rounded-2xl backdrop-blur-sm border border-red-500/30">
-            <h4 className="font-bold text-lg mb-2">Restore Vault</h4>
-            <p className="text-sm text-gray-300 mb-4">Overwrite current database with a backup file. <span className="text-red-300">Irreversible.</span></p>
-            <label className="w-full bg-red-900/50 text-red-200 border border-red-500/50 font-bold py-3 rounded-xl hover:bg-red-900 transition-colors flex justify-center gap-2 items-center cursor-pointer">
-              <Upload className="w-5 h-5" /> Upload Backup File
+            <h4 className="font-bold text-lg mb-2">Import from SafeTrack (offline version)</h4>
+            <p className="text-sm text-gray-300 mb-4">Move your history in from a backup file made by the original browser-only SafeTrack. Works once, into a church with no batches yet. Finalized batches stay finalized with their original tellers.</p>
+            <label className={`${isAdmin ? '' : 'pointer-events-none opacity-50 '}w-full bg-red-900/50 text-red-200 border border-red-500/50 font-bold py-3 rounded-xl hover:bg-red-900 transition-colors flex justify-center gap-2 items-center cursor-pointer`}>
+              <Upload className="w-5 h-5" /> Import Backup File
               <input type="file" onChange={handleRestore} className="hidden" accept=".json" />
             </label>
           </div>
